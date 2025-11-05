@@ -182,7 +182,7 @@ def add_player(player_data):
             player_data['name'] = normalize_player_name(player_data['name'])
         
         # Validate and clamp values
-        player_data['age'] = max(10, min(60, player_data.get('age', 25)))
+        player_data['age'] = max(10, min(100, player_data.get('age', 25)))
         player_data['height'] = max(140, min(220, player_data.get('height', 175)))
         player_data['running_ability'] = max(1, min(10, player_data.get('running_ability', 5)))
         player_data['goal_scoring'] = max(1, min(10, player_data.get('goal_scoring', 5)))
@@ -203,7 +203,7 @@ def update_player(player_id, updates):
         
         # Validate and clamp values
         if 'age' in updates:
-            updates['age'] = max(10, min(60, updates['age']))
+            updates['age'] = max(10, min(100, updates['age']))
         if 'height' in updates:
             updates['height'] = max(140, min(220, updates['height']))
         if 'running_ability' in updates:
@@ -570,7 +570,7 @@ elif st.session_state.page == 'players':
                 goals = st.slider("Goal Scoring", 1, 10, 5)
             
             with col2:
-                age = st.number_input("Age", 10, 60, 25)
+                age = st.number_input("Age", 10, 100, 25)
                 height = st.number_input("Height (cm)", 140, 220, 175)
                 skill = st.slider("Overall Skill", 1, 10, 5)
             
@@ -612,7 +612,7 @@ elif st.session_state.page == 'players':
                     player_id = player['id']
                     
                     # Safely get clamped values
-                    current_age = safe_get_value(player, 'age', 25, 10, 60)
+                    current_age = safe_get_value(player, 'age', 25, 10, 100)
                     current_height = safe_get_value(player, 'height', 175, 140, 220)
                     current_running = safe_get_value(player, 'running_ability', 5, 1, 10)
                     current_goals = safe_get_value(player, 'goal_scoring', 5, 1, 10)
@@ -625,7 +625,7 @@ elif st.session_state.page == 'players':
                                                     key=f"p{player_id}")
                     
                     with col2:
-                        new_age = st.number_input("Age", 10, 60, current_age, key=f"a{player_id}")
+                        new_age = st.number_input("Age", 10, 100, current_age, key=f"a{player_id}")
                         new_height = st.number_input("Height", 140, 220, current_height, key=f"h{player_id}")
                     
                     with col3:
