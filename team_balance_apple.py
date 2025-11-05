@@ -1,11 +1,9 @@
 import streamlit as st
 import pandas as pd
-import json
-import os
 from datetime import datetime
 from pulp import LpProblem, LpVariable, LpMinimize, lpSum, LpBinary, value, PULP_CBC_CMD
 from typing import Dict, List
-import supabase
+from supabase import create_client, Client
 
 # Page config
 st.set_page_config(
@@ -14,6 +12,34 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
+# Initialize Supabase client
+@st.cache_resource
+def init_supabase() -> Client:
+    """Initialize Supabase client with credentials from secrets"""
+    url = st.secrets["supabase"]["url"]
+    key = st.secrets["supabase"]["key"]
+    return create_client(url, key)
+
+# Get Supabase client
+try:
+    supabase = init_supabase()
+except Exception as e:
+    st.error(f"""
+    ⚠️ Supabase not configured!
+    
+    Please add your Supabase credentials:
+    1. Go to Streamlit Cloud → App Settings → Secrets
+    2. Add:
+    ```
+    [supabase]
+    url = "YOUR_SUPABASE_URL"
+    key = "YOUR_SUPABASE_KEY"
+    ```
+    
+    Error: {str(e)}
+    """)
+    st.stop()
 
 # Modern, clean CSS
 st.markdown("""
@@ -33,34 +59,6 @@ st.markdown("""
     footer {visibility: hidden;}
     header {visibility: hidden;}
     
-    /* Simple Header */
-    .app-header {
-        background: white;
-        padding: 20px 40px;
-        border-bottom: 1px solid #e0e0e0;
-        margin: -60px -60px 40px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-    }
-    
-    .app-title {
-        font-size: 24px;
-        font-weight: 600;
-        color: #1a1a1a;
-    }
-    
-    /* Navigation Tabs */
-    .nav-container {
-        display: flex;
-        gap: 4px;
-        background: white;
-        padding: 4px;
-        border-radius: 12px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    }
-    
-    /* Cards */
     .card {
         background: white;
         border-radius: 16px;
@@ -77,13 +75,6 @@ st.markdown("""
         margin: 0 0 8px 0;
     }
     
-    .card p {
-        font-size: 15px;
-        color: #666;
-        margin: 0;
-    }
-    
-    /* Team Cards */
     .team-card {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         border-radius: 16px;
@@ -93,20 +84,12 @@ st.markdown("""
         box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
     }
     
-    .team-card h3 {
-        font-size: 20px;
-        font-weight: 600;
-        margin: 0 0 16px 0;
-    }
-    
     .team-card-blue { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); }
     .team-card-green { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
     .team-card-purple { background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); }
     .team-card-orange { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
     .team-card-red { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
-    .team-card-pink { background: linear-gradient(135deg, #ec4899 0%, #db2777 100%); }
     
-    /* Player Cards */
     .player-card {
         background: rgba(255, 255, 255, 0.95);
         border-radius: 12px;
@@ -115,18 +98,6 @@ st.markdown("""
         color: #1a1a1a;
     }
     
-    .player-name {
-        font-size: 15px;
-        font-weight: 600;
-        margin-bottom: 4px;
-    }
-    
-    .player-stats {
-        font-size: 13px;
-        color: #666;
-    }
-    
-    /* Position Badge */
     .badge {
         display: inline-block;
         padding: 4px 10px;
@@ -134,7 +105,6 @@ st.markdown("""
         font-size: 11px;
         font-weight: 600;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
         margin-right: 8px;
     }
     
@@ -143,7 +113,6 @@ st.markdown("""
     .badge-defender { background: #eef; color: #2563eb; }
     .badge-goalkeeper { background: #ffe; color: #d97706; }
     
-    /* Buttons */
     .stButton>button {
         background: #667eea;
         color: white;
@@ -157,10 +126,8 @@ st.markdown("""
     .stButton>button:hover {
         background: #5568d3;
         transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
     }
     
-    /* Metrics */
     .metric {
         background: white;
         padding: 20px;
@@ -182,92 +149,141 @@ st.markdown("""
         letter-spacing: 0.5px;
         margin-top: 4px;
     }
-    
-    /* Forms */
-    .stTextInput>div>div>input,
-    .stNumberInput>div>div>input,
-    .stSelectbox>div>div>select {
-        border-radius: 10px;
-        border: 1px solid #e0e0e0;
-        padding: 10px 14px;
-    }
-    
-    /* Tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 4px;
-        background: white;
-        border-radius: 12px;
-        padding: 4px;
-        border: 1px solid #f0f0f0;
-    }
-    
-    .stTabs [data-baseweb="tab"] {
-        border-radius: 8px;
-        padding: 10px 20px;
-        font-weight: 500;
-    }
-    
-    .stTabs [aria-selected="true"] {
-        background: #667eea;
-        color: white;
-    }
-    
-    /* Hide default nav */
-    [data-testid="stSidebarNav"] {
-        display: none;
-    }
 </style>
 """, unsafe_allow_html=True)
 
-# Data files
-PLAYERS_FILE = "players_inventory.json"
-GAMES_FILE = "games_history.json"
-PARTNERSHIPS_FILE = "player_partnerships.json"
-CONFLICTS_FILE = "player_conflicts.json"
-
-# Position options
 POSITIONS = ["Forward", "Midfielder", "Defender", "Goalkeeper"]
-TEAM_COLORS = ["blue", "green", "purple", "orange", "red", "pink"]
+TEAM_COLORS = ["blue", "green", "purple", "orange", "red"]
 
-def load_json(filename, default):
-    """Load JSON file or return default if not exists"""
-    if os.path.exists(filename):
-        with open(filename, 'r') as f:
-            return json.load(f)
-    return default
-
-def save_json(filename, data):
-    """Save data to JSON file"""
-    with open(filename, 'w') as f:
-        json.dump(data, f, indent=2)
-
+# Database functions
 def load_players():
-    response = supabase.table('players').select('*').execute()
-    return response.data
+    """Load all players from Supabase"""
+    try:
+        response = supabase.table('players').select('*').order('created_at', desc=False).execute()
+        return response.data
+    except Exception as e:
+        st.error(f"Error loading players: {e}")
+        return []
 
-def save_player(player):
-    supabase.table('players').insert(player).execute()
+def add_player(player_data):
+    """Add a new player to Supabase"""
+    try:
+        response = supabase.table('players').insert(player_data).execute()
+        return True
+    except Exception as e:
+        st.error(f"Error adding player: {e}")
+        return False
+
+def update_player(player_id, updates):
+    """Update a player in Supabase"""
+    try:
+        response = supabase.table('players').update(updates).eq('id', player_id).execute()
+        return True
+    except Exception as e:
+        st.error(f"Error updating player: {e}")
+        return False
+
+def delete_player(player_id):
+    """Delete a player from Supabase"""
+    try:
+        response = supabase.table('players').delete().eq('id', player_id).execute()
+        return True
+    except Exception as e:
+        st.error(f"Error deleting player: {e}")
+        return False
 
 def load_games():
-    return load_json(GAMES_FILE, [])
+    """Load all games from Supabase"""
+    try:
+        response = supabase.table('games').select('*').order('created_at', desc=True).execute()
+        return response.data
+    except Exception as e:
+        st.error(f"Error loading games: {e}")
+        return []
 
 def save_game(game_data):
-    games = load_games()
-    games.append(game_data)
-    save_json(GAMES_FILE, games)
+    """Save a game to Supabase"""
+    try:
+        response = supabase.table('games').insert(game_data).execute()
+        return True
+    except Exception as e:
+        st.error(f"Error saving game: {e}")
+        return False
+
+def delete_game(game_id):
+    """Delete a game from Supabase"""
+    try:
+        response = supabase.table('games').delete().eq('id', game_id).execute()
+        return True
+    except Exception as e:
+        st.error(f"Error deleting game: {e}")
+        return False
 
 def load_partnerships():
-    return load_json(PARTNERSHIPS_FILE, {})
+    """Load partnerships from Supabase"""
+    try:
+        response = supabase.table('partnerships').select('*').execute()
+        partnerships = {}
+        for p in response.data:
+            if p['player1'] not in partnerships:
+                partnerships[p['player1']] = []
+            partnerships[p['player1']].append(p['player2'])
+        return partnerships
+    except Exception as e:
+        st.error(f"Error loading partnerships: {e}")
+        return {}
 
-def save_partnerships(partnerships):
-    save_json(PARTNERSHIPS_FILE, partnerships)
+def add_partnership(player1, player2):
+    """Add a partnership to Supabase"""
+    try:
+        supabase.table('partnerships').insert({'player1': player1, 'player2': player2}).execute()
+        return True
+    except Exception as e:
+        st.error(f"Error adding partnership: {e}")
+        return False
+
+def delete_partnership(player1, player2):
+    """Delete a partnership from Supabase"""
+    try:
+        supabase.table('partnerships').delete().eq('player1', player1).eq('player2', player2).execute()
+        supabase.table('partnerships').delete().eq('player1', player2).eq('player2', player1).execute()
+        return True
+    except Exception as e:
+        return False
 
 def load_conflicts():
-    return load_json(CONFLICTS_FILE, {})
+    """Load conflicts from Supabase"""
+    try:
+        response = supabase.table('conflicts').select('*').execute()
+        conflicts = {}
+        for c in response.data:
+            if c['player1'] not in conflicts:
+                conflicts[c['player1']] = []
+            conflicts[c['player1']].append(c['player2'])
+        return conflicts
+    except Exception as e:
+        st.error(f"Error loading conflicts: {e}")
+        return {}
 
-def save_conflicts(conflicts):
-    save_json(CONFLICTS_FILE, conflicts)
+def add_conflict(player1, player2):
+    """Add a conflict to Supabase"""
+    try:
+        supabase.table('conflicts').insert({'player1': player1, 'player2': player2}).execute()
+        return True
+    except Exception as e:
+        st.error(f"Error adding conflict: {e}")
+        return False
 
+def delete_conflict(player1, player2):
+    """Delete a conflict from Supabase"""
+    try:
+        supabase.table('conflicts').delete().eq('player1', player1).eq('player2', player2).execute()
+        supabase.table('conflicts').delete().eq('player1', player2).eq('player2', player1).execute()
+        return True
+    except Exception as e:
+        return False
+
+# Team balancing functions
 def calculate_player_score(player):
     return (
         player.get('running_ability', 5) +
@@ -408,7 +424,7 @@ if 'locked_players' not in st.session_state:
 col1, col2 = st.columns([1, 3])
 
 with col1:
-    st.markdown('<div class="app-title">⚽ Team Balance</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size: 24px; font-weight: 600; padding: 10px 0;">⚽ Team Balance</div>', unsafe_allow_html=True)
 
 with col2:
     nav_cols = st.columns(5)
@@ -528,56 +544,85 @@ elif st.session_state.page == 'players':
                 elif any(p['name'] == name for p in players):
                     st.error(f"Player '{name}' exists")
                 else:
-                    players.append({
-                        'name': name, 'position': position,
-                        'running_ability': running, 'goal_scoring': goals,
-                        'age': age, 'height': height, 'overall_skill': skill,
-                        'created_at': datetime.now().isoformat()
-                    })
-                    save_players(players)
-                    st.success(f"✅ Added {name}")
-                    st.rerun()
+                    player_data = {
+                        'name': name,
+                        'position': position,
+                        'running_ability': running,
+                        'goal_scoring': goals,
+                        'age': age,
+                        'height': height,
+                        'overall_skill': skill
+                    }
+                    if add_player(player_data):
+                        st.success(f"✅ Added {name}")
+                        st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
     
     with tab2:
         if not players:
             st.info("No players yet")
         else:
-            for idx, player in enumerate(players):
+            st.info("💡 Edit player stats below and click Save Changes to update the database")
+            
+            for player in players:
                 with st.expander(f"{player['name']} - {player.get('position', 'N/A')}"):
                     col1, col2, col3 = st.columns([2, 2, 1])
                     
+                    player_id = player['id']
+                    
                     with col1:
-                        player['name'] = st.text_input("Name", player['name'], key=f"n{idx}")
-                        player['position'] = st.selectbox("Position", POSITIONS, 
-                                                         index=POSITIONS.index(player.get('position', 'Midfielder')),
-                                                         key=f"p{idx}")
+                        new_name = st.text_input("Name", player['name'], key=f"n{player_id}")
+                        new_position = st.selectbox("Position", POSITIONS, 
+                                                    index=POSITIONS.index(player.get('position', 'Midfielder')),
+                                                    key=f"p{player_id}")
+                    
                     with col2:
-                        player['age'] = st.number_input("Age", 10, 60, player.get('age', 25), key=f"a{idx}")
-                        player['height'] = st.number_input("Height", 140, 220, player.get('height', 175), key=f"h{idx}")
+                        new_age = st.number_input("Age", 10, 60, player.get('age', 25), key=f"a{player_id}")
+                        new_height = st.number_input("Height", 140, 220, player.get('height', 175), key=f"h{player_id}")
                     
                     with col3:
-                        if st.button("Delete", key=f"d{idx}", type="secondary"):
-                            players.pop(idx)
-                            save_players(players)
-                            st.rerun()
+                        if st.button("Delete", key=f"d{player_id}", type="secondary"):
+                            if delete_player(player_id):
+                                st.success("Deleted!")
+                                st.rerun()
                     
                     col1, col2, col3 = st.columns(3)
-                    player['running_ability'] = col1.slider("Running", 1, 10, player.get('running_ability', 5), key=f"r{idx}")
-                    player['goal_scoring'] = col2.slider("Goals", 1, 10, player.get('goal_scoring', 5), key=f"g{idx}")
-                    player['overall_skill'] = col3.slider("Skill", 1, 10, player.get('overall_skill', 5), key=f"s{idx}")
-            
-            if st.button("💾 Save Changes", type="primary", use_container_width=True):
-                save_players(players)
-                st.success("✅ Saved")
-                st.rerun()
+                    new_running = col1.slider("Running", 1, 10, player.get('running_ability', 5), key=f"r{player_id}")
+                    new_goals = col2.slider("Goals", 1, 10, player.get('goal_scoring', 5), key=f"g{player_id}")
+                    new_skill = col3.slider("Skill", 1, 10, player.get('overall_skill', 5), key=f"s{player_id}")
+                    
+                    if st.button("💾 Save Changes for This Player", key=f"save{player_id}", use_container_width=True):
+                        updates = {
+                            'name': new_name,
+                            'position': new_position,
+                            'age': new_age,
+                            'height': new_height,
+                            'running_ability': new_running,
+                            'goal_scoring': new_goals,
+                            'overall_skill': new_skill
+                        }
+                        if update_player(player_id, updates):
+                            st.success("✅ Updated!")
+                            st.rerun()
     
     with tab3:
         col1, col2 = st.columns(2)
         
         with col1:
             if players:
-                csv = pd.DataFrame(players).to_csv(index=False)
+                # Convert to pandas and download
+                df_data = []
+                for p in players:
+                    df_data.append({
+                        'name': p['name'],
+                        'position': p['position'],
+                        'running_ability': p.get('running_ability', 5),
+                        'goal_scoring': p.get('goal_scoring', 5),
+                        'age': p.get('age', 25),
+                        'height': p.get('height', 175),
+                        'overall_skill': p.get('overall_skill', 5)
+                    })
+                csv = pd.DataFrame(df_data).to_csv(index=False)
                 st.download_button("📥 Download CSV", csv, 
                                  f"players_{datetime.now().strftime('%Y%m%d')}.csv",
                                  mime="text/csv", use_container_width=True)
@@ -587,13 +632,17 @@ elif st.session_state.page == 'players':
             if uploaded and st.button("Import", use_container_width=True):
                 try:
                     df = pd.read_csv(uploaded)
-                    save_players(df.to_dict('records'))
-                    st.success(f"✅ Imported {len(df)} players")
+                    count = 0
+                    for _, row in df.iterrows():
+                        player_data = row.to_dict()
+                        if add_player(player_data):
+                            count += 1
+                    st.success(f"✅ Imported {count} players")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {e}")
 
-# RELATIONSHIPS PAGE
+# RELATIONSHIPS PAGE  
 elif st.session_state.page == 'relationships':
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown('<h2>Relationships</h2>', unsafe_allow_html=True)
@@ -621,13 +670,9 @@ elif st.session_state.page == 'relationships':
                 if remaining:
                     p2 = st.selectbox("Player 2", remaining, key="p2")
                     if st.button("Add", use_container_width=True, type="primary"):
-                        if p1 not in partnerships: partnerships[p1] = []
-                        if p2 not in partnerships: partnerships[p2] = []
-                        if p2 not in partnerships[p1]: partnerships[p1].append(p2)
-                        if p1 not in partnerships[p2]: partnerships[p2].append(p1)
-                        save_partnerships(partnerships)
-                        st.success("✅ Added")
-                        st.rerun()
+                        if add_partnership(p1, p2) and add_partnership(p2, p1):
+                            st.success("✅ Added")
+                            st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
             
             with col2:
@@ -643,11 +688,8 @@ elif st.session_state.page == 'relationships':
                                 c1, c2 = st.columns([3, 1])
                                 c1.write(f"{pair[0]} ↔️ {pair[1]}")
                                 if c2.button("×", key=f"rp{pair}"):
-                                    if pair[1] in partnerships.get(pair[0], []): partnerships[pair[0]].remove(pair[1])
-                                    if pair[0] in partnerships.get(pair[1], []): partnerships[pair[1]].remove(pair[0])
-                                    partnerships = {k: v for k, v in partnerships.items() if v}
-                                    save_partnerships(partnerships)
-                                    st.rerun()
+                                    if delete_partnership(pair[0], pair[1]):
+                                        st.rerun()
                 else:
                     st.info("No partnerships")
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -664,13 +706,9 @@ elif st.session_state.page == 'relationships':
                 if remaining:
                     c2 = st.selectbox("Player 2", remaining, key="c2")
                     if st.button("Add", use_container_width=True, type="primary"):
-                        if c1 not in conflicts: conflicts[c1] = []
-                        if c2 not in conflicts: conflicts[c2] = []
-                        if c2 not in conflicts[c1]: conflicts[c1].append(c2)
-                        if c1 not in conflicts[c2]: conflicts[c2].append(c1)
-                        save_conflicts(conflicts)
-                        st.success("✅ Added")
-                        st.rerun()
+                        if add_conflict(c1, c2) and add_conflict(c2, c1):
+                            st.success("✅ Added")
+                            st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
             
             with col2:
@@ -686,11 +724,8 @@ elif st.session_state.page == 'relationships':
                                 c1, c2 = st.columns([3, 1])
                                 c1.write(f"{pair[0]} ⚠️ {pair[1]}")
                                 if c2.button("×", key=f"rc{pair}"):
-                                    if pair[1] in conflicts.get(pair[0], []): conflicts[pair[0]].remove(pair[1])
-                                    if pair[0] in conflicts.get(pair[1], []): conflicts[pair[1]].remove(pair[0])
-                                    conflicts = {k: v for k, v in conflicts.items() if v}
-                                    save_conflicts(conflicts)
-                                    st.rerun()
+                                    if delete_conflict(pair[0], pair[1]):
+                                        st.rerun()
                 else:
                     st.info("No conflicts")
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -766,14 +801,14 @@ elif st.session_state.page == 'game':
                 st.rerun()
             
             if col2.button("💾 Save", use_container_width=True, type="primary"):
-                save_game({
+                game_data = {
                     'name': st.session_state.game_name,
-                    'date': datetime.now().isoformat(),
-                    'teams': st.session_state.generated_teams,
                     'num_teams': len(st.session_state.generated_teams),
-                    'total_players': sum(len(t) for t in st.session_state.generated_teams)
-                })
-                st.success("✅ Saved")
+                    'total_players': sum(len(t) for t in st.session_state.generated_teams),
+                    'teams': st.session_state.generated_teams
+                }
+                if save_game(game_data):
+                    st.success("✅ Saved")
             
             if col3.button("Clear Locks", use_container_width=True):
                 st.session_state.locked_players = {}
@@ -785,8 +820,8 @@ elif st.session_state.page == 'game':
                 
                 st.markdown(f"""
                 <div class="team-card team-card-{color}">
-                    <h3>Team {idx + 1}</h3>
-                    <div style="opacity: 0.9; margin-bottom: 16px;">
+                    <h3 style="margin: 0; font-size: 20px;">Team {idx + 1}</h3>
+                    <div style="opacity: 0.9; margin-top: 8px; font-size: 14px;">
                         {len(team)} players • Score: {metrics['total_score']:.1f}
                     </div>
                 </div>
@@ -803,11 +838,11 @@ elif st.session_state.page == 'game':
                     pos = player.get('position', 'Midfielder').lower()
                     st.markdown(f"""
                     <div class="player-card">
-                        <div class="player-name">
+                        <div style="font-size: 15px; font-weight: 600; margin-bottom: 4px;">
                             <span class="badge badge-{pos}">{player.get('position', 'MID')[:3]}</span>
                             {player['name']}
                         </div>
-                        <div class="player-stats">
+                        <div style="font-size: 13px; color: #666;">
                             Run: {player.get('running_ability', 5)}/10 • 
                             Goal: {player.get('goal_scoring', 5)}/10 • 
                             Skill: {player.get('overall_skill', 5)}/10
@@ -827,18 +862,17 @@ elif st.session_state.page == 'history':
     if not games:
         st.info("No games yet")
     else:
-        for idx, game in enumerate(reversed(games)):
-            with st.expander(f"🎮 {game['name']} - {game['date'][:10]}"):
+        for game in games:
+            with st.expander(f"🎮 {game['name']} - {game.get('created_at', '')[:10] if game.get('created_at') else 'No date'}"):
                 st.markdown('<div class="card">', unsafe_allow_html=True)
-                st.write(f"**Date:** {game['date'][:16]}")
                 st.write(f"**Teams:** {game['num_teams']}")
                 st.write(f"**Players:** {game['total_players']}")
                 
-                for team_idx, team in enumerate(game['teams']):
+                for team_idx, team in enumerate(game.get('teams', [])):
                     st.markdown(f"**Team {team_idx + 1}:** {', '.join(p['name'] for p in team)}")
                 
-                if st.button("Delete", key=f"del{idx}", type="secondary"):
-                    games.remove(game)
-                    save_json(GAMES_FILE, games)
-                    st.rerun()
+                if st.button("Delete", key=f"del{game['id']}", type="secondary"):
+                    if delete_game(game['id']):
+                        st.success("Deleted!")
+                        st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
