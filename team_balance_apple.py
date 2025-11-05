@@ -241,10 +241,11 @@ def save_json(filename, data):
         json.dump(data, f, indent=2)
 
 def load_players():
-    return load_json(PLAYERS_FILE, [])
+    response = supabase.table('players').select('*').execute()
+    return response.data
 
-def save_players(players):
-    save_json(PLAYERS_FILE, players)
+def save_player(player):
+    supabase.table('players').insert(player).execute()
 
 def load_games():
     return load_json(GAMES_FILE, [])
