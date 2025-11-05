@@ -15,5 +15,3 @@ port = 8501
 [browser]
 gatherUsageStats = false
 
-
-DATABASE_URL=postgresql://postgres:q!cuC6hZ6Qr+!Y@db.mzpkigwmofumtqgwusuh.supabase.co:5432/postgres

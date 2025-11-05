@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 from pulp import LpProblem, LpVariable, LpMinimize, lpSum, LpBinary, value, PULP_CBC_CMD
 from typing import Dict, List
+import supabase
 
 # Page config
 st.set_page_config(
