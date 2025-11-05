@@ -165,9 +165,29 @@ def load_players():
         st.error(f"Error loading players: {e}")
         return []
 
+def normalize_player_name(name):
+    """Normalize player name to title case for consistency"""
+    return name.strip().title() if name else ""
+
+def safe_get_value(player, key, default, min_val, max_val):
+    """Safely get a value from player dict and clamp it within range"""
+    value = player.get(key, default)
+    return max(min_val, min(max_val, value))
+
 def add_player(player_data):
     """Add a new player to Supabase"""
     try:
+        # Normalize name for consistency
+        if 'name' in player_data:
+            player_data['name'] = normalize_player_name(player_data['name'])
+        
+        # Validate and clamp values
+        player_data['age'] = max(10, min(60, player_data.get('age', 25)))
+        player_data['height'] = max(140, min(220, player_data.get('height', 175)))
+        player_data['running_ability'] = max(1, min(10, player_data.get('running_ability', 5)))
+        player_data['goal_scoring'] = max(1, min(10, player_data.get('goal_scoring', 5)))
+        player_data['overall_skill'] = max(1, min(10, player_data.get('overall_skill', 5)))
+        
         response = supabase.table('players').insert(player_data).execute()
         return True
     except Exception as e:
@@ -177,6 +197,22 @@ def add_player(player_data):
 def update_player(player_id, updates):
     """Update a player in Supabase"""
     try:
+        # Normalize name
+        if 'name' in updates:
+            updates['name'] = normalize_player_name(updates['name'])
+        
+        # Validate and clamp values
+        if 'age' in updates:
+            updates['age'] = max(10, min(60, updates['age']))
+        if 'height' in updates:
+            updates['height'] = max(140, min(220, updates['height']))
+        if 'running_ability' in updates:
+            updates['running_ability'] = max(1, min(10, updates['running_ability']))
+        if 'goal_scoring' in updates:
+            updates['goal_scoring'] = max(1, min(10, updates['goal_scoring']))
+        if 'overall_skill' in updates:
+            updates['overall_skill'] = max(1, min(10, updates['overall_skill']))
+        
         response = supabase.table('players').update(updates).eq('id', player_id).execute()
         return True
     except Exception as e:
@@ -541,21 +577,26 @@ elif st.session_state.page == 'players':
             if st.form_submit_button("Add Player", use_container_width=True, type="primary"):
                 if not name:
                     st.error("Name required")
-                elif any(p['name'] == name for p in players):
-                    st.error(f"Player '{name}' exists")
                 else:
-                    player_data = {
-                        'name': name,
-                        'position': position,
-                        'running_ability': running,
-                        'goal_scoring': goals,
-                        'age': age,
-                        'height': height,
-                        'overall_skill': skill
-                    }
-                    if add_player(player_data):
-                        st.success(f"✅ Added {name}")
-                        st.rerun()
+                    # Check for duplicates (case-insensitive)
+                    normalized_name = normalize_player_name(name)
+                    existing_names = [normalize_player_name(p['name']) for p in players]
+                    
+                    if normalized_name in existing_names:
+                        st.error(f"Player '{normalized_name}' already exists (case-insensitive match)")
+                    else:
+                        player_data = {
+                            'name': name,
+                            'position': position,
+                            'running_ability': running,
+                            'goal_scoring': goals,
+                            'age': age,
+                            'height': height,
+                            'overall_skill': skill
+                        }
+                        if add_player(player_data):
+                            st.success(f"✅ Added {normalized_name}")
+                            st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
     
     with tab2:
@@ -570,6 +611,13 @@ elif st.session_state.page == 'players':
                     
                     player_id = player['id']
                     
+                    # Safely get clamped values
+                    current_age = safe_get_value(player, 'age', 25, 10, 60)
+                    current_height = safe_get_value(player, 'height', 175, 140, 220)
+                    current_running = safe_get_value(player, 'running_ability', 5, 1, 10)
+                    current_goals = safe_get_value(player, 'goal_scoring', 5, 1, 10)
+                    current_skill = safe_get_value(player, 'overall_skill', 5, 1, 10)
+                    
                     with col1:
                         new_name = st.text_input("Name", player['name'], key=f"n{player_id}")
                         new_position = st.selectbox("Position", POSITIONS, 
@@ -577,8 +625,8 @@ elif st.session_state.page == 'players':
                                                     key=f"p{player_id}")
                     
                     with col2:
-                        new_age = st.number_input("Age", 10, 60, player.get('age', 25), key=f"a{player_id}")
-                        new_height = st.number_input("Height", 140, 220, player.get('height', 175), key=f"h{player_id}")
+                        new_age = st.number_input("Age", 10, 60, current_age, key=f"a{player_id}")
+                        new_height = st.number_input("Height", 140, 220, current_height, key=f"h{player_id}")
                     
                     with col3:
                         if st.button("Delete", key=f"d{player_id}", type="secondary"):
@@ -587,9 +635,9 @@ elif st.session_state.page == 'players':
                                 st.rerun()
                     
                     col1, col2, col3 = st.columns(3)
-                    new_running = col1.slider("Running", 1, 10, player.get('running_ability', 5), key=f"r{player_id}")
-                    new_goals = col2.slider("Goals", 1, 10, player.get('goal_scoring', 5), key=f"g{player_id}")
-                    new_skill = col3.slider("Skill", 1, 10, player.get('overall_skill', 5), key=f"s{player_id}")
+                    new_running = col1.slider("Running", 1, 10, current_running, key=f"r{player_id}")
+                    new_goals = col2.slider("Goals", 1, 10, current_goals, key=f"g{player_id}")
+                    new_skill = col3.slider("Skill", 1, 10, current_skill, key=f"s{player_id}")
                     
                     if st.button("💾 Save Changes for This Player", key=f"save{player_id}", use_container_width=True):
                         updates = {
@@ -632,13 +680,42 @@ elif st.session_state.page == 'players':
             if uploaded and st.button("Import", use_container_width=True):
                 try:
                     df = pd.read_csv(uploaded)
+                    
+                    # Get existing player names (normalized for comparison)
+                    existing_names = {normalize_player_name(p['name']): True for p in players}
+                    
                     count = 0
+                    skipped = 0
                     for _, row in df.iterrows():
                         player_data = row.to_dict()
+                        
+                        # Normalize the name
+                        player_name = normalize_player_name(player_data.get('name', ''))
+                        
+                        # Skip if player already exists (case-insensitive)
+                        if player_name in existing_names:
+                            skipped += 1
+                            continue
+                        
+                        # Ensure position is valid (case-insensitive)
+                        if 'position' in player_data:
+                            position_lower = str(player_data['position']).lower()
+                            for pos in POSITIONS:
+                                if pos.lower() == position_lower:
+                                    player_data['position'] = pos
+                                    break
+                        
                         if add_player(player_data):
                             count += 1
-                    st.success(f"✅ Imported {count} players")
-                    st.rerun()
+                            existing_names[player_name] = True
+                    
+                    if count > 0:
+                        st.success(f"✅ Imported {count} players")
+                    if skipped > 0:
+                        st.info(f"ℹ️ Skipped {skipped} duplicate players")
+                    
+                    if count > 0:
+                        st.rerun()
                 except Exception as e:
                     st.error(f"Error: {e}")
 
