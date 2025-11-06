@@ -801,7 +801,7 @@ elif st.session_state.page == 'players':
                 goals = st.slider("Goal Scoring", 1, 10, 5, key="new_player_goals")
             
             with col2:
-                age = st.number_input("Age", 10, 60, 25, key="new_player_age")
+                age = st.number_input("Age", 10, 100, 25, key="new_player_age")
                 height = st.number_input("Height (cm)", 140, 220, 175, key="new_player_height")
                 skill = st.slider("Overall Skill", 1, 10, 5, key="new_player_skill")
             
@@ -853,7 +853,7 @@ elif st.session_state.page == 'players':
                                 new_goals = st.slider("Goals", 1, 10, player.get('goal_scoring', 5), key=f"edit_goal_{idx}")
                             
                             with c2:
-                                new_age = st.number_input("Age", 10, 60, player.get('age', 25), key=f"edit_age_{idx}")
+                                new_age = st.number_input("Age", 10, 100, player.get('age', 25), key=f"edit_age_{idx}")
                                 new_skill = st.slider("Skill", 1, 10, player.get('overall_skill', 5), key=f"edit_skill_{idx}")
                             
                             col_update, col_delete = st.columns(2)
@@ -940,7 +940,7 @@ elif st.session_state.page == 'players':
                             'position': row.get('position', 'Midfielder'),
                             'running_ability': max(1, min(10, int(row.get('running_ability', 5)))),
                             'goal_scoring': max(1, min(10, int(row.get('goal_scoring', 5)))),
-                            'age': max(10, min(60, int(row.get('age', 25)))),
+                            'age': max(10, min(100, int(row.get('age', 25)))),
                             'height': max(140, min(220, int(row.get('height', 175)))),
                             'overall_skill': max(1, min(10, int(row.get('overall_skill', 5)))),
                             'created_at': datetime.now().isoformat()
