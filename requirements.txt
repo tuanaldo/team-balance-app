@@ -1,5 +1,6 @@
 streamlit==1.31.0
 pandas
-ortools
+ortools==9.12.4544
+protobuf==5.29.3
 openpyxl==3.1.2
 supabase>=2.3.0
