@@ -9,9 +9,22 @@ import os
 
 # Supabase setup (if using cloud version)
 # Try Streamlit secrets first (for Streamlit Cloud), then fall back to environment variables
+# Support both formats: with [supabase] section and without
 try:
-    SUPABASE_URL = st.secrets.get("SUPABASE_URL", "") or os.getenv("SUPABASE_URL", "")
-    SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "") or os.getenv("SUPABASE_KEY", "")
+    # Try with [supabase] section first
+    if "supabase" in st.secrets:
+        SUPABASE_URL = st.secrets["supabase"].get("SUPABASE_URL", "")
+        SUPABASE_KEY = st.secrets["supabase"].get("SUPABASE_KEY", "")
+    else:
+        # Try without section (root level)
+        SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
+        SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
+    
+    # Fall back to environment variables if not in secrets
+    if not SUPABASE_URL:
+        SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+    if not SUPABASE_KEY:
+        SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 except:
     SUPABASE_URL = os.getenv("SUPABASE_URL", "")
     SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
@@ -590,6 +603,51 @@ if st.session_state.page == 'home':
         <p>Create perfectly balanced teams in seconds</p>
     </div>
     """, unsafe_allow_html=True)
+    
+    # Debug section (shows if not connected)
+    if not (USE_SUPABASE and st.session_state.get('supabase_connected', False)):
+        with st.expander("🔍 Connection Debug Info", expanded=True):
+            st.warning("⚠️ Not connected to Supabase - using local storage")
+            
+            st.write("**Configuration Check:**")
+            has_url = bool(SUPABASE_URL)
+            has_key = bool(SUPABASE_KEY)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if has_url:
+                    st.success(f"✅ URL found: {SUPABASE_URL[:30]}...")
+                else:
+                    st.error("❌ URL missing")
+            
+            with col2:
+                if has_key:
+                    st.success(f"✅ Key found: {SUPABASE_KEY[:20]}...")
+                else:
+                    st.error("❌ Key missing")
+            
+            if has_url and has_key:
+                st.info("Both credentials found but connection failed. Checking...")
+                
+                if st.button("🔄 Test Connection Now"):
+                    try:
+                        from supabase import create_client
+                        test_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+                        result = test_client.table('players').select('*').limit(1).execute()
+                        st.success(f"✅ Connection works! Found {len(result.data)} players")
+                        st.info("Connection is working. Click 'Reboot app' in Streamlit settings to reconnect.")
+                    except Exception as e:
+                        st.error(f"❌ Connection failed: {str(e)}")
+                        st.write("**Common fixes:**")
+                        st.write("- Make sure tables are created in Supabase")
+                        st.write("- Check RLS policies allow access")
+                        st.write("- Verify you're using the anon public key")
+            else:
+                st.write("**To fix:**")
+                st.write("1. Go to Streamlit Cloud → Settings → Secrets")
+                st.write("2. Add your credentials (see guides)")
+                st.write("3. Click Save")
+                st.write("4. App will restart automatically")
     
     # Feature cards
     col1, col2, col3 = st.columns(3)
