@@ -670,6 +670,7 @@ with st.sidebar:
 # Page routing
 if st.session_state.page == 'home':
     # Header with Logo and Title
+    st.markdown('<div class="header-card">', unsafe_allow_html=True)
     col1, col2 = st.columns([1, 6])
     
     with col1:
@@ -680,6 +681,8 @@ if st.session_state.page == 'home':
     
     with col2:
         st.markdown('<h1 class="app-title" style="margin-top: 15px;">Team Balancer Pro</h1>', unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
     
     # Debug section (shows if not connected)
     if not (USE_SUPABASE and st.session_state.get('supabase_connected', False)):
