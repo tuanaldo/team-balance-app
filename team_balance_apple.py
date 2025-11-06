@@ -1,450 +1,461 @@
 import streamlit as st
-import pandas as pd
+import json
 from datetime import datetime
-from pulp import LpProblem, LpVariable, LpMinimize, lpSum, LpBinary, value, PULP_CBC_CMD
-from typing import Dict, List
-from supabase import create_client, Client
+import random
+from pulp import *
+import pandas as pd
+from io import StringIO
+import os
 
-# Page config
+# Supabase setup (if using cloud version)
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+USE_SUPABASE = bool(SUPABASE_URL and SUPABASE_KEY)
+
+if USE_SUPABASE:
+    from supabase import create_client
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# Constants
+POSITIONS = ["Forward", "Midfielder", "Defender", "Goalkeeper"]
+LOCAL_PLAYERS_FILE = "players.json"
+LOCAL_GAMES_FILE = "games.json"
+
+# Page config MUST be first Streamlit command
 st.set_page_config(
-    page_title="Team Balance",
+    page_title="Team Balance Pro",
     page_icon="⚽",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
-# Initialize Supabase client
-@st.cache_resource
-def init_supabase() -> Client:
-    """Initialize Supabase client with credentials from secrets"""
-    url = st.secrets["supabase"]["url"]
-    key = st.secrets["supabase"]["key"]
-    return create_client(url, key)
-
-# Get Supabase client
-try:
-    supabase = init_supabase()
-except Exception as e:
-    st.error(f"""
-    ⚠️ Supabase not configured!
-    
-    Please add your Supabase credentials:
-    1. Go to Streamlit Cloud → App Settings → Secrets
-    2. Add:
-    ```
-    [supabase]
-    url = "YOUR_SUPABASE_URL"
-    key = "YOUR_SUPABASE_KEY"
-    ```
-    
-    Error: {str(e)}
-    """)
-    st.stop()
-
-# Modern, clean CSS
+# Custom CSS - Mobile-First & Apple-Inspired
 st.markdown("""
 <style>
+    /* Import Apple-like font */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     
     * {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
     
-    .main {
-        background: #fafafa;
-        padding: 0;
+    /* Hide Streamlit branding */
+    #MainMenu, footer, header {visibility: hidden;}
+    
+    /* Main container */
+    .main .block-container {
+        padding: 1rem 1rem 3rem 1rem;
+        max-width: 100%;
     }
     
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
+    /* Mobile responsive adjustments */
+    @media (min-width: 768px) {
+        .main .block-container {
+            padding: 2rem 3rem 4rem 3rem;
+        }
+    }
     
+    /* Hero section */
+    .hero {
+        text-align: center;
+        padding: 3rem 1rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 20px;
+        color: white;
+        margin-bottom: 2rem;
+        box-shadow: 0 10px 40px rgba(102, 126, 234, 0.3);
+    }
+    
+    .hero h1 {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+        text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    }
+    
+    @media (max-width: 768px) {
+        .hero h1 {
+            font-size: 1.8rem;
+        }
+    }
+    
+    .hero p {
+        font-size: 1.1rem;
+        opacity: 0.95;
+        margin-top: 0.5rem;
+    }
+    
+    @media (max-width: 768px) {
+        .hero p {
+            font-size: 0.95rem;
+        }
+    }
+    
+    /* Cards */
     .card {
         background: white;
         border-radius: 16px;
-        padding: 32px;
-        margin: 16px 0;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-        border: 1px solid #f0f0f0;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        transition: all 0.3s ease;
     }
     
-    .card h2 {
-        font-size: 24px;
-        font-weight: 600;
-        color: #1a1a1a;
-        margin: 0 0 8px 0;
+    .card:hover {
+        box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+        transform: translateY(-2px);
     }
     
-    .team-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    /* Metric cards */
+    .metric-card {
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
         border-radius: 16px;
-        padding: 24px;
-        margin: 16px 0;
-        color: white;
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
-    }
-    
-    .team-card-blue { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); }
-    .team-card-green { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
-    .team-card-purple { background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); }
-    .team-card-orange { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
-    .team-card-red { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
-    
-    .player-card {
-        background: rgba(255, 255, 255, 0.95);
-        border-radius: 12px;
-        padding: 16px;
-        margin: 8px 0;
-        color: #1a1a1a;
-    }
-    
-    .badge {
-        display: inline-block;
-        padding: 4px 10px;
-        border-radius: 6px;
-        font-size: 11px;
-        font-weight: 600;
-        text-transform: uppercase;
-        margin-right: 8px;
-    }
-    
-    .badge-forward { background: #fee; color: #dc2626; }
-    .badge-midfielder { background: #efe; color: #059669; }
-    .badge-defender { background: #eef; color: #2563eb; }
-    .badge-goalkeeper { background: #ffe; color: #d97706; }
-    
-    .stButton>button {
-        background: #667eea;
-        color: white;
-        border: none;
-        border-radius: 10px;
-        padding: 10px 20px;
-        font-weight: 500;
-        transition: all 0.2s;
-    }
-    
-    .stButton>button:hover {
-        background: #5568d3;
-        transform: translateY(-1px);
-    }
-    
-    .metric {
-        background: white;
-        padding: 20px;
-        border-radius: 12px;
+        padding: 1.5rem;
         text-align: center;
-        border: 1px solid #f0f0f0;
+        margin-bottom: 1rem;
     }
     
-    .metric-value {
-        font-size: 28px;
+    .metric-card h3 {
+        font-size: 2rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .metric-card h4 {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        color: #2d3748;
+    }
+    
+    .metric-card p {
+        font-size: 0.9rem;
+        color: #4a5568;
+        margin: 0;
+    }
+    
+    /* Team cards with gradients */
+    .team-card {
+        border-radius: 16px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        color: white;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+    
+    .team-1 { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    .team-2 { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+    .team-3 { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+    .team-4 { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+    .team-5 { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
+    
+    .team-card h3 {
+        font-size: 1.5rem;
         font-weight: 700;
-        color: #1a1a1a;
+        margin-bottom: 1rem;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.2);
     }
     
-    .metric-label {
-        font-size: 12px;
-        color: #666;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-top: 4px;
+    .player-item {
+        background: rgba(255, 255, 255, 0.2);
+        backdrop-filter: blur(10px);
+        padding: 0.75rem;
+        border-radius: 10px;
+        margin-bottom: 0.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+    
+    .player-name {
+        font-weight: 600;
+        font-size: 1rem;
+    }
+    
+    .player-stats {
+        font-size: 0.85rem;
+        opacity: 0.9;
+        margin-top: 0.25rem;
+    }
+    
+    /* Buttons */
+    .stButton > button {
+        border-radius: 12px;
+        font-weight: 600;
+        padding: 0.75rem 2rem;
+        transition: all 0.3s ease;
+        border: none;
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+    }
+    
+    /* Form inputs */
+    .stTextInput > div > div > input,
+    .stNumberInput > div > div > input,
+    .stSelectbox > div > div > div {
+        border-radius: 10px;
+        border: 2px solid #e2e8f0;
+        padding: 0.75rem;
+        font-size: 1rem;
+    }
+    
+    .stTextInput > div > div > input:focus,
+    .stNumberInput > div > div > input:focus,
+    .stSelectbox > div > div > div:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    
+    /* Sliders */
+    .stSlider > div > div > div > div {
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+    }
+    
+    /* Success/Error messages */
+    .stSuccess, .stError, .stWarning, .stInfo {
+        border-radius: 12px;
+        padding: 1rem;
+        margin: 1rem 0;
+    }
+    
+    /* Sidebar */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #f7fafc 0%, #edf2f7 100%);
+    }
+    
+    [data-testid="stSidebar"] .stButton > button {
+        width: 100%;
+        margin-bottom: 0.5rem;
+        background: white;
+        color: #2d3748;
+        border: 2px solid transparent;
+    }
+    
+    [data-testid="stSidebar"] .stButton > button:hover {
+        border-color: #667eea;
+        background: #f7fafc;
+    }
+    
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 0.5rem;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 10px 10px 0 0;
+        padding: 0.75rem 1.5rem;
+        font-weight: 600;
+    }
+    
+    /* Mobile improvements */
+    @media (max-width: 768px) {
+        .player-item {
+            font-size: 0.9rem;
+            padding: 0.6rem;
+        }
+        
+        .team-card h3 {
+            font-size: 1.3rem;
+        }
+        
+        .stButton > button {
+            padding: 0.6rem 1.5rem;
+            font-size: 0.9rem;
+        }
+        
+        /* Make sure text is visible on mobile */
+        .stMarkdown, .stText, p, span, div {
+            color: inherit !important;
+        }
+    }
+    
+    /* Logo */
+    .logo-container {
+        text-align: center;
+        margin: 2rem 0;
+    }
+    
+    .logo {
+        width: 120px;
+        height: 120px;
+        margin: 0 auto;
+    }
+    
+    /* Expander improvements */
+    .streamlit-expanderHeader {
+        font-weight: 600;
+        font-size: 1.05rem;
+        background: #f7fafc;
+        border-radius: 10px;
+        padding: 0.75rem 1rem;
+    }
+    
+    /* History cards */
+    .history-card {
+        background: white;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+        transition: all 0.3s ease;
+    }
+    
+    .history-card:hover {
+        border-color: #667eea;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+    }
+    
+    .game-date {
+        font-size: 0.9rem;
+        color: #718096;
+        font-weight: 500;
+    }
+    
+    .game-title {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #2d3748;
+        margin: 0.5rem 0;
     }
 </style>
 """, unsafe_allow_html=True)
 
-POSITIONS = ["Forward", "Midfielder", "Defender", "Goalkeeper"]
-TEAM_COLORS = ["blue", "green", "purple", "orange", "red"]
-
 # Database functions
 def load_players():
-    """Load all players from Supabase"""
-    try:
-        response = supabase.table('players').select('*').order('created_at', desc=False).execute()
-        return response.data
-    except Exception as e:
-        st.error(f"Error loading players: {e}")
-        return []
+    """Load players from Supabase or local JSON"""
+    if USE_SUPABASE:
+        try:
+            response = supabase.table('players').select('*').execute()
+            return response.data
+        except:
+            pass
+    
+    # Fallback to local
+    if os.path.exists(LOCAL_PLAYERS_FILE):
+        with open(LOCAL_PLAYERS_FILE, 'r') as f:
+            return json.load(f)
+    return []
 
-def normalize_player_name(name):
-    """Normalize player name to title case for consistency"""
-    return name.strip().title() if name else ""
-
-def safe_get_value(player, key, default, min_val, max_val):
-    """Safely get a value from player dict and clamp it within range"""
-    value = player.get(key, default)
-    return max(min_val, min(max_val, value))
-
-def add_player(player_data):
-    """Add a new player to Supabase"""
-    try:
-        # Normalize name for consistency
-        if 'name' in player_data:
-            player_data['name'] = normalize_player_name(player_data['name'])
-        
-        # Validate and clamp values
-        player_data['age'] = max(10, min(100, player_data.get('age', 25)))
-        player_data['height'] = max(140, min(220, player_data.get('height', 175)))
-        player_data['running_ability'] = max(1, min(10, player_data.get('running_ability', 5)))
-        player_data['goal_scoring'] = max(1, min(10, player_data.get('goal_scoring', 5)))
-        player_data['overall_skill'] = max(1, min(10, player_data.get('overall_skill', 5)))
-        
-        response = supabase.table('players').insert(player_data).execute()
-        return True
-    except Exception as e:
-        st.error(f"Error adding player: {e}")
-        return False
-
-def update_player(player_id, updates):
-    """Update a player in Supabase"""
-    try:
-        # Normalize name
-        if 'name' in updates:
-            updates['name'] = normalize_player_name(updates['name'])
-        
-        # Validate and clamp values
-        if 'age' in updates:
-            updates['age'] = max(10, min(100, updates['age']))
-        if 'height' in updates:
-            updates['height'] = max(140, min(220, updates['height']))
-        if 'running_ability' in updates:
-            updates['running_ability'] = max(1, min(10, updates['running_ability']))
-        if 'goal_scoring' in updates:
-            updates['goal_scoring'] = max(1, min(10, updates['goal_scoring']))
-        if 'overall_skill' in updates:
-            updates['overall_skill'] = max(1, min(10, updates['overall_skill']))
-        
-        response = supabase.table('players').update(updates).eq('id', player_id).execute()
-        return True
-    except Exception as e:
-        st.error(f"Error updating player: {e}")
-        return False
-
-def delete_player(player_id):
-    """Delete a player from Supabase"""
-    try:
-        response = supabase.table('players').delete().eq('id', player_id).execute()
-        return True
-    except Exception as e:
-        st.error(f"Error deleting player: {e}")
-        return False
+def save_players(players):
+    """Save players to Supabase or local JSON"""
+    if USE_SUPABASE:
+        try:
+            # Delete all and re-insert (simple approach)
+            supabase.table('players').delete().neq('id', 0).execute()
+            if players:
+                supabase.table('players').insert(players).execute()
+            return
+        except:
+            pass
+    
+    # Fallback to local
+    with open(LOCAL_PLAYERS_FILE, 'w') as f:
+        json.dump(players, f, indent=2)
 
 def load_games():
-    """Load all games from Supabase"""
-    try:
-        response = supabase.table('games').select('*').order('created_at', desc=True).execute()
-        return response.data
-    except Exception as e:
-        st.error(f"Error loading games: {e}")
-        return []
+    """Load game history from Supabase or local JSON"""
+    if USE_SUPABASE:
+        try:
+            response = supabase.table('games').select('*').order('created_at', desc=True).execute()
+            return response.data
+        except:
+            pass
+    
+    # Fallback to local
+    if os.path.exists(LOCAL_GAMES_FILE):
+        with open(LOCAL_GAMES_FILE, 'r') as f:
+            return json.load(f)
+    return []
 
 def save_game(game_data):
-    """Save a game to Supabase"""
-    try:
-        response = supabase.table('games').insert(game_data).execute()
-        return True
-    except Exception as e:
-        st.error(f"Error saving game: {e}")
-        return False
-
-def delete_game(game_id):
-    """Delete a game from Supabase"""
-    try:
-        response = supabase.table('games').delete().eq('id', game_id).execute()
-        return True
-    except Exception as e:
-        st.error(f"Error deleting game: {e}")
-        return False
-
-def load_partnerships():
-    """Load partnerships from Supabase"""
-    try:
-        response = supabase.table('partnerships').select('*').execute()
-        partnerships = {}
-        for p in response.data:
-            if p['player1'] not in partnerships:
-                partnerships[p['player1']] = []
-            partnerships[p['player1']].append(p['player2'])
-        return partnerships
-    except Exception as e:
-        st.error(f"Error loading partnerships: {e}")
-        return {}
-
-def add_partnership(player1, player2):
-    """Add a partnership to Supabase"""
-    try:
-        supabase.table('partnerships').insert({'player1': player1, 'player2': player2}).execute()
-        return True
-    except Exception as e:
-        st.error(f"Error adding partnership: {e}")
-        return False
-
-def delete_partnership(player1, player2):
-    """Delete a partnership from Supabase"""
-    try:
-        supabase.table('partnerships').delete().eq('player1', player1).eq('player2', player2).execute()
-        supabase.table('partnerships').delete().eq('player1', player2).eq('player2', player1).execute()
-        return True
-    except Exception as e:
-        return False
-
-def load_conflicts():
-    """Load conflicts from Supabase"""
-    try:
-        response = supabase.table('conflicts').select('*').execute()
-        conflicts = {}
-        for c in response.data:
-            if c['player1'] not in conflicts:
-                conflicts[c['player1']] = []
-            conflicts[c['player1']].append(c['player2'])
-        return conflicts
-    except Exception as e:
-        st.error(f"Error loading conflicts: {e}")
-        return {}
-
-def add_conflict(player1, player2):
-    """Add a conflict to Supabase"""
-    try:
-        supabase.table('conflicts').insert({'player1': player1, 'player2': player2}).execute()
-        return True
-    except Exception as e:
-        st.error(f"Error adding conflict: {e}")
-        return False
-
-def delete_conflict(player1, player2):
-    """Delete a conflict from Supabase"""
-    try:
-        supabase.table('conflicts').delete().eq('player1', player1).eq('player2', player2).execute()
-        supabase.table('conflicts').delete().eq('player1', player2).eq('player2', player1).execute()
-        return True
-    except Exception as e:
-        return False
-
-# Team balancing functions
-def calculate_player_score(player):
-    return (
-        player.get('running_ability', 5) +
-        player.get('goal_scoring', 5) +
-        player.get('age', 25) / 5 +
-        player.get('height', 170) / 34 +
-        player.get('overall_skill', 5)
-    )
-
-def count_positions(team_players):
-    positions = {"Forward": 0, "Midfielder": 0, "Defender": 0, "Goalkeeper": 0}
-    for player in team_players:
-        pos = player.get('position', 'Midfielder')
-        positions[pos] += 1
-    return positions
-
-def calculate_team_metrics(team_players):
-    if not team_players:
-        return {
-            'avg_running': 0, 'avg_goals': 0, 'avg_age': 0,
-            'avg_height': 0, 'avg_skill': 0, 'total_score': 0,
-            'position_dist': {"Forward": 0, "Midfielder": 0, "Defender": 0, "Goalkeeper": 0}
-        }
+    """Save a game to history"""
+    games = load_games()
+    games.insert(0, game_data)
     
-    positions = count_positions(team_players)
-    return {
-        'avg_running': sum(p.get('running_ability', 5) for p in team_players) / len(team_players),
-        'avg_goals': sum(p.get('goal_scoring', 5) for p in team_players) / len(team_players),
-        'avg_age': sum(p.get('age', 25) for p in team_players) / len(team_players),
-        'avg_height': sum(p.get('height', 170) for p in team_players) / len(team_players),
-        'avg_skill': sum(p.get('overall_skill', 5) for p in team_players) / len(team_players),
-        'total_score': sum(calculate_player_score(p) for p in team_players),
-        'position_dist': positions
-    }
+    if USE_SUPABASE:
+        try:
+            supabase.table('games').insert(game_data).execute()
+            return
+        except:
+            pass
+    
+    # Fallback to local
+    with open(LOCAL_GAMES_FILE, 'w') as f:
+        json.dump(games, f, indent=2)
 
-def balance_teams_advanced(players, num_teams, partnerships, conflicts, locked_assignments):
-    try:
-        prob = LpProblem("Team_Balancing", LpMinimize)
-        
-        assignments = {}
-        for i, player in enumerate(players):
-            for t in range(num_teams):
-                assignments[(i, t)] = LpVariable(f"player_{i}_team_{t}", cat=LpBinary)
-        
-        for i in range(len(players)):
-            prob += lpSum([assignments[(i, t)] for t in range(num_teams)]) == 1
-        
-        for player_name, team_idx in locked_assignments.items():
-            player_idx = next((i for i, p in enumerate(players) if p['name'] == player_name), None)
-            if player_idx is not None:
-                prob += assignments[(player_idx, team_idx)] == 1
-        
-        team_size = len(players) // num_teams
-        for t in range(num_teams):
-            prob += lpSum([assignments[(i, t)] for i in range(len(players))]) >= team_size
-            prob += lpSum([assignments[(i, t)] for i in range(len(players))]) <= team_size + 1
-        
-        team_scores = {}
-        for t in range(num_teams):
-            team_score = lpSum([
-                assignments[(i, t)] * calculate_player_score(players[i])
-                for i in range(len(players))
-            ])
-            team_scores[t] = team_score
-        
-        max_score = LpVariable("max_score")
-        min_score = LpVariable("min_score")
-        
-        for t in range(num_teams):
-            prob += team_scores[t] <= max_score
-            prob += team_scores[t] >= min_score
-        
-        prob += max_score - min_score
-        
-        partnership_bonus = 0
-        for player1, partners in partnerships.items():
-            p1_idx = next((i for i, p in enumerate(players) if p['name'] == player1), None)
-            if p1_idx is not None:
-                for player2 in partners:
-                    p2_idx = next((i for i, p in enumerate(players) if p['name'] == player2), None)
-                    if p2_idx is not None and p1_idx < p2_idx:
-                        for t in range(num_teams):
-                            partnership_bonus += 10 * (2 - assignments[(p1_idx, t)] - assignments[(p2_idx, t)])
-        prob += partnership_bonus
-        
-        conflict_penalty = 0
-        for player1, conflicts_list in conflicts.items():
-            p1_idx = next((i for i, p in enumerate(players) if p['name'] == player1), None)
-            if p1_idx is not None:
-                for player2 in conflicts_list:
-                    p2_idx = next((i for i, p in enumerate(players) if p['name'] == player2), None)
-                    if p2_idx is not None and p1_idx < p2_idx:
-                        for t in range(num_teams):
-                            conflict_penalty += 20 * (assignments[(p1_idx, t)] + assignments[(p2_idx, t)] - 1)
-        prob += conflict_penalty
-        
-        prob.solve(PULP_CBC_CMD(msg=0))
-        
+# Team generation algorithm
+def generate_balanced_teams(players, num_teams):
+    """Generate balanced teams using optimization"""
+    n_players = len(players)
+    
+    if n_players < num_teams:
+        return None
+    
+    # Create optimization problem
+    prob = LpProblem("Team_Balance", LpMinimize)
+    
+    # Decision variables: player i assigned to team j
+    x = {}
+    for i in range(n_players):
+        for j in range(num_teams):
+            x[i, j] = LpVariable(f"x_{i}_{j}", cat='Binary')
+    
+    # Each player assigned to exactly one team
+    for i in range(n_players):
+        prob += lpSum(x[i, j] for j in range(num_teams)) == 1
+    
+    # Team size constraints (as equal as possible)
+    min_size = n_players // num_teams
+    max_size = min_size + (1 if n_players % num_teams > 0 else 0)
+    
+    for j in range(num_teams):
+        prob += lpSum(x[i, j] for i in range(n_players)) >= min_size
+        prob += lpSum(x[i, j] for i in range(n_players)) <= max_size
+    
+    # Objective: minimize variance in total skill across teams
+    team_skills = []
+    for j in range(num_teams):
+        team_skill = lpSum(
+            x[i, j] * (
+                players[i].get('running_ability', 5) +
+                players[i].get('goal_scoring', 5) +
+                players[i].get('overall_skill', 5)
+            ) / 3.0
+            for i in range(n_players)
+        )
+        team_skills.append(team_skill)
+    
+    # Minimize maximum deviation from average
+    avg_skill = sum(
+        (p.get('running_ability', 5) + p.get('goal_scoring', 5) + p.get('overall_skill', 5)) / 3.0
+        for p in players
+    ) / num_teams
+    
+    deviation = LpVariable("max_deviation")
+    for team_skill in team_skills:
+        prob += deviation >= team_skill - avg_skill * min_size
+        prob += deviation >= avg_skill * min_size - team_skill
+    
+    prob += deviation
+    
+    # Solve
+    prob.solve(PULP_CBC_CMD(msg=0))
+    
+    if prob.status != 1:
+        # Fallback to random assignment
         teams = [[] for _ in range(num_teams)]
-        for i, player in enumerate(players):
-            for t in range(num_teams):
-                if value(assignments[(i, t)]) == 1:
-                    teams[t].append(player)
-                    break
+        shuffled = players.copy()
+        random.shuffle(shuffled)
+        for i, player in enumerate(shuffled):
+            teams[i % num_teams].append(player)
         return teams
-    except:
-        return balance_teams_greedy(players, num_teams, locked_assignments)
-
-def balance_teams_greedy(players, num_teams, locked_assignments):
-    sorted_players = sorted(players, key=calculate_player_score, reverse=True)
+    
+    # Extract solution
     teams = [[] for _ in range(num_teams)]
-    
-    assigned_players = set()
-    for player_name, team_idx in locked_assignments.items():
-        player = next((p for p in sorted_players if p['name'] == player_name), None)
-        if player:
-            teams[team_idx].append(player)
-            assigned_players.add(player_name)
-    
-    sorted_players = [p for p in sorted_players if p['name'] not in assigned_players]
-    
-    for player in sorted_players:
-        team_scores = [sum(calculate_player_score(p) for p in team) for team in teams]
-        min_team = team_scores.index(min(team_scores))
-        teams[min_team].append(player)
+    for i in range(n_players):
+        for j in range(num_teams):
+            if x[i, j].varValue > 0.5:
+                teams[j].append(players[i])
     
     return teams
 
@@ -453,503 +464,509 @@ if 'page' not in st.session_state:
     st.session_state.page = 'home'
 if 'generated_teams' not in st.session_state:
     st.session_state.generated_teams = None
-if 'locked_players' not in st.session_state:
-    st.session_state.locked_players = {}
+if 'last_generation_timestamp' not in st.session_state:
+    st.session_state.last_generation_timestamp = None
 
-# Header with navigation
-col1, col2 = st.columns([1, 3])
-
-with col1:
-    st.markdown('<div style="font-size: 24px; font-weight: 600; padding: 10px 0;">⚽ Team Balance</div>', unsafe_allow_html=True)
-
-with col2:
-    nav_cols = st.columns(5)
+# Sidebar navigation
+with st.sidebar:
+    st.markdown("### ⚽ Navigation")
     
-    if nav_cols[0].button("Home", use_container_width=True, type="primary" if st.session_state.page == 'home' else "secondary"):
+    if st.button("🏠 Home", use_container_width=True):
         st.session_state.page = 'home'
         st.rerun()
     
-    if nav_cols[1].button("Players", use_container_width=True, type="primary" if st.session_state.page == 'players' else "secondary"):
+    if st.button("👥 Manage Players", use_container_width=True):
         st.session_state.page = 'players'
         st.rerun()
     
-    if nav_cols[2].button("Create Game", use_container_width=True, type="primary" if st.session_state.page == 'game' else "secondary"):
+    if st.button("🎯 Create Teams", use_container_width=True):
         st.session_state.page = 'game'
         st.rerun()
     
-    if nav_cols[3].button("Relationships", use_container_width=True, type="primary" if st.session_state.page == 'relationships' else "secondary"):
-        st.session_state.page = 'relationships'
-        st.rerun()
-    
-    if nav_cols[4].button("History", use_container_width=True, type="primary" if st.session_state.page == 'history' else "secondary"):
+    if st.button("📊 Game History", use_container_width=True):
         st.session_state.page = 'history'
         st.rerun()
+    
+    st.markdown("---")
+    st.markdown("**Team Balance Pro**")
+    st.markdown("v2.0")
 
-st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
-
-# HOME PAGE
+# Page routing
 if st.session_state.page == 'home':
+    # Hero section with logo
+    st.markdown("""
+    <div class="hero">
+        <div class="logo-container">
+            <img src="logo.png" class="logo" alt="Team Balance Pro Logo" />
+        </div>
+        <h1>⚽ Team Balance Pro</h1>
+        <p>Create perfectly balanced teams in seconds</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Feature cards
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("""
+        <div class="metric-card">
+            <h3>👥</h3>
+            <h4>Player Inventory</h4>
+            <p>Manage your permanent player roster with detailed stats</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown("""
+        <div class="metric-card">
+            <h3>🎯</h3>
+            <h4>Smart Balancing</h4>
+            <p>AI-powered team generation with position awareness</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col3:
+        st.markdown("""
+        <div class="metric-card">
+            <h3>📊</h3>
+            <h4>Game History</h4>
+            <p>Track all your past games and team compositions</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # Quick stats
     players = load_players()
     games = load_games()
-    
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown('<h2>Dashboard</h2>', unsafe_allow_html=True)
-    st.markdown('<p>Quick overview of your team management</p>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
     
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         st.markdown(f"""
-        <div class="metric">
-            <div class="metric-value">{len(players)}</div>
-            <div class="metric-label">Players</div>
+        <div class="card" style="text-align: center;">
+            <h2 style="color: #667eea; margin: 0;">{len(players)}</h2>
+            <p style="margin: 0.5rem 0 0 0; color: #718096;">Total Players</p>
         </div>
         """, unsafe_allow_html=True)
     
     with col2:
         st.markdown(f"""
-        <div class="metric">
-            <div class="metric-value">{len(games)}</div>
-            <div class="metric-label">Games</div>
+        <div class="card" style="text-align: center;">
+            <h2 style="color: #764ba2; margin: 0;">{len(games)}</h2>
+            <p style="margin: 0.5rem 0 0 0; color: #718096;">Games Played</p>
         </div>
         """, unsafe_allow_html=True)
     
-    if players:
-        avg_skill = sum(p.get('overall_skill', 5) for p in players) / len(players)
-        with col3:
-            st.markdown(f"""
-            <div class="metric">
-                <div class="metric-value">{avg_skill:.1f}</div>
-                <div class="metric-label">Avg Skill</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
+    with col3:
+        avg_skill = sum(p.get('overall_skill', 5) for p in players) / len(players) if players else 0
+        st.markdown(f"""
+        <div class="card" style="text-align: center;">
+            <h2 style="color: #f5576c; margin: 0;">{avg_skill:.1f}</h2>
+            <p style="margin: 0.5rem 0 0 0; color: #718096;">Avg Skill</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col4:
         positions_count = {}
         for p in players:
             pos = p.get('position', 'Midfielder')
             positions_count[pos] = positions_count.get(pos, 0) + 1
-        most_common = max(positions_count, key=positions_count.get) if positions_count else "None"
-        
-        with col4:
-            st.markdown(f"""
-            <div class="metric">
-                <div class="metric-value">{most_common[:3]}</div>
-                <div class="metric-label">Top Position</div>
-            </div>
-            """, unsafe_allow_html=True)
+        most_common = max(positions_count, key=positions_count.get)[:3] if positions_count else "N/A"
+        st.markdown(f"""
+        <div class="card" style="text-align: center;">
+            <h2 style="color: #00f2fe; margin: 0;">{most_common}</h2>
+            <p style="margin: 0.5rem 0 0 0; color: #718096;">Top Position</p>
+        </div>
+        """, unsafe_allow_html=True)
     
     st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
     
+    # Call to action
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        if st.button("Create New Game", use_container_width=True, type="primary"):
+        if st.button("🎯 Create New Game", use_container_width=True, type="primary"):
             st.session_state.page = 'game'
             st.rerun()
 
-# PLAYERS PAGE
 elif st.session_state.page == 'players':
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown('<h2>Players</h2>', unsafe_allow_html=True)
-    st.markdown('<p>Manage your player roster</p>', unsafe_allow_html=True)
+    st.markdown('<h1>👥 Player Management</h1>', unsafe_allow_html=True)
+    st.markdown('<p style="font-size: 1.1rem; color: #718096;">Manage your permanent player roster</p>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
     
     players = load_players()
     
-    tab1, tab2, tab3 = st.tabs(["Add Player", "Edit Players", "Import/Export"])
+    tab1, tab2, tab3 = st.tabs(["➕ Add Player", "✏️ Edit Players", "📥 Import/Export"])
     
     with tab1:
         st.markdown('<div class="card">', unsafe_allow_html=True)
-        with st.form("add_player"):
+        st.subheader("Add New Player")
+        
+        with st.form("add_player_form", clear_on_submit=True):
             col1, col2 = st.columns(2)
             
             with col1:
-                name = st.text_input("Player Name*")
-                position = st.selectbox("Position*", POSITIONS)
-                running = st.slider("Running Ability", 1, 10, 5)
-                goals = st.slider("Goal Scoring", 1, 10, 5)
+                name = st.text_input("Player Name*", key="new_player_name")
+                position = st.selectbox("Position*", POSITIONS, key="new_player_position")
+                running = st.slider("Running Ability", 1, 10, 5, key="new_player_running")
+                goals = st.slider("Goal Scoring", 1, 10, 5, key="new_player_goals")
             
             with col2:
-                age = st.number_input("Age", 10, 100, 25)
-                height = st.number_input("Height (cm)", 140, 220, 175)
-                skill = st.slider("Overall Skill", 1, 10, 5)
+                age = st.number_input("Age", 10, 60, 25, key="new_player_age")
+                height = st.number_input("Height (cm)", 140, 220, 175, key="new_player_height")
+                skill = st.slider("Overall Skill", 1, 10, 5, key="new_player_skill")
             
-            if st.form_submit_button("Add Player", use_container_width=True, type="primary"):
-                if not name:
-                    st.error("Name required")
+            submitted = st.form_submit_button("✅ Add Player", use_container_width=True, type="primary")
+            
+            if submitted:
+                if not name or not name.strip():
+                    st.error("❌ Player name is required!")
+                elif any(p['name'].lower() == name.strip().lower() for p in players):
+                    st.error(f"❌ Player '{name}' already exists!")
                 else:
-                    # Check for duplicates (case-insensitive)
-                    normalized_name = normalize_player_name(name)
-                    existing_names = [normalize_player_name(p['name']) for p in players]
-                    
-                    if normalized_name in existing_names:
-                        st.error(f"Player '{normalized_name}' already exists (case-insensitive match)")
-                    else:
-                        player_data = {
-                            'name': name,
-                            'position': position,
-                            'running_ability': running,
-                            'goal_scoring': goals,
-                            'age': age,
-                            'height': height,
-                            'overall_skill': skill
-                        }
-                        if add_player(player_data):
-                            st.success(f"✅ Added {normalized_name}")
-                            st.rerun()
+                    new_player = {
+                        'name': name.strip().title(),
+                        'position': position,
+                        'running_ability': running,
+                        'goal_scoring': goals,
+                        'age': age,
+                        'height': height,
+                        'overall_skill': skill,
+                        'created_at': datetime.now().isoformat()
+                    }
+                    players.append(new_player)
+                    save_players(players)
+                    st.success(f"✅ Successfully added {name}!")
+                    st.balloons()
+                    st.rerun()
+        
         st.markdown('</div>', unsafe_allow_html=True)
     
     with tab2:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        
         if not players:
-            st.info("No players yet")
+            st.info("📭 No players yet. Add some players to get started!")
         else:
-            st.info("💡 Edit player stats below and click Save Changes to update the database")
+            st.subheader(f"All Players ({len(players)})")
             
-            for player in players:
-                with st.expander(f"{player['name']} - {player.get('position', 'N/A')}"):
-                    col1, col2, col3 = st.columns([2, 2, 1])
-                    
-                    player_id = player['id']
-                    
-                    # Safely get clamped values
-                    current_age = safe_get_value(player, 'age', 25, 10, 100)
-                    current_height = safe_get_value(player, 'height', 175, 140, 220)
-                    current_running = safe_get_value(player, 'running_ability', 5, 1, 10)
-                    current_goals = safe_get_value(player, 'goal_scoring', 5, 1, 10)
-                    current_skill = safe_get_value(player, 'overall_skill', 5, 1, 10)
+            for idx, player in enumerate(players):
+                with st.expander(f"⚽ {player['name']} - {player.get('position', 'N/A')}", expanded=False):
+                    col1, col2 = st.columns([3, 1])
                     
                     with col1:
-                        new_name = st.text_input("Name", player['name'], key=f"n{player_id}")
-                        new_position = st.selectbox("Position", POSITIONS, 
-                                                    index=POSITIONS.index(player.get('position', 'Midfielder')),
-                                                    key=f"p{player_id}")
+                        # Edit form
+                        with st.form(f"edit_player_{idx}"):
+                            c1, c2 = st.columns(2)
+                            
+                            with c1:
+                                new_running = st.slider("Running", 1, 10, player.get('running_ability', 5), key=f"edit_run_{idx}")
+                                new_goals = st.slider("Goals", 1, 10, player.get('goal_scoring', 5), key=f"edit_goal_{idx}")
+                            
+                            with c2:
+                                new_age = st.number_input("Age", 10, 60, player.get('age', 25), key=f"edit_age_{idx}")
+                                new_skill = st.slider("Skill", 1, 10, player.get('overall_skill', 5), key=f"edit_skill_{idx}")
+                            
+                            col_update, col_delete = st.columns(2)
+                            
+                            with col_update:
+                                if st.form_submit_button("💾 Update Stats", use_container_width=True):
+                                    players[idx].update({
+                                        'running_ability': new_running,
+                                        'goal_scoring': new_goals,
+                                        'age': new_age,
+                                        'overall_skill': new_skill,
+                                        'updated_at': datetime.now().isoformat()
+                                    })
+                                    save_players(players)
+                                    st.success(f"✅ Updated {player['name']}!")
+                                    st.rerun()
                     
                     with col2:
-                        new_age = st.number_input("Age", 10, 100, current_age, key=f"a{player_id}")
-                        new_height = st.number_input("Height", 140, 220, current_height, key=f"h{player_id}")
-                    
-                    with col3:
-                        if st.button("Delete", key=f"d{player_id}", type="secondary"):
-                            if delete_player(player_id):
-                                st.success("Deleted!")
-                                st.rerun()
-                    
-                    col1, col2, col3 = st.columns(3)
-                    new_running = col1.slider("Running", 1, 10, current_running, key=f"r{player_id}")
-                    new_goals = col2.slider("Goals", 1, 10, current_goals, key=f"g{player_id}")
-                    new_skill = col3.slider("Skill", 1, 10, current_skill, key=f"s{player_id}")
-                    
-                    if st.button("💾 Save Changes for This Player", key=f"save{player_id}", use_container_width=True):
-                        updates = {
-                            'name': new_name,
-                            'position': new_position,
-                            'age': new_age,
-                            'height': new_height,
-                            'running_ability': new_running,
-                            'goal_scoring': new_goals,
-                            'overall_skill': new_skill
-                        }
-                        if update_player(player_id, updates):
-                            st.success("✅ Updated!")
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        if st.button(f"🗑️ Delete", key=f"delete_{idx}", use_container_width=True):
+                            players.pop(idx)
+                            save_players(players)
+                            st.success(f"Deleted {player['name']}")
                             st.rerun()
+        
+        st.markdown('</div>', unsafe_allow_html=True)
     
     with tab3:
-        col1, col2 = st.columns(2)
+        st.markdown('<div class="card">', unsafe_allow_html=True)
         
-        with col1:
-            if players:
-                # Convert to pandas and download
-                df_data = []
-                for p in players:
-                    df_data.append({
-                        'name': p['name'],
-                        'position': p['position'],
-                        'running_ability': p.get('running_ability', 5),
-                        'goal_scoring': p.get('goal_scoring', 5),
-                        'age': p.get('age', 25),
-                        'height': p.get('height', 175),
-                        'overall_skill': p.get('overall_skill', 5)
-                    })
-                csv = pd.DataFrame(df_data).to_csv(index=False)
-                st.download_button("📥 Download CSV", csv, 
-                                 f"players_{datetime.now().strftime('%Y%m%d')}.csv",
-                                 mime="text/csv", use_container_width=True)
+        # Export
+        st.subheader("📤 Export Players")
+        if players:
+            df = pd.DataFrame(players)
+            csv = df.to_csv(index=False)
+            st.download_button(
+                label="⬇️ Download CSV",
+                data=csv,
+                file_name=f"players_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        else:
+            st.info("No players to export")
         
-        with col2:
-            uploaded = st.file_uploader("Import CSV", type=['csv'])
-            if uploaded and st.button("Import", use_container_width=True):
-                try:
-                    df = pd.read_csv(uploaded)
-                    
-                    # Get existing player names (normalized for comparison)
-                    existing_names = {normalize_player_name(p['name']): True for p in players}
-                    
-                    count = 0
+        st.markdown("---")
+        
+        # Import
+        st.subheader("📥 Import Players")
+        uploaded_file = st.file_uploader("Upload CSV file", type=['csv'])
+        
+        if uploaded_file:
+            try:
+                df = pd.read_csv(uploaded_file)
+                
+                st.write("Preview:")
+                st.dataframe(df.head())
+                
+                if st.button("✅ Import Players", type="primary", use_container_width=True):
+                    imported = 0
                     skipped = 0
+                    
                     for _, row in df.iterrows():
-                        player_data = row.to_dict()
-                        
-                        # Normalize the name
-                        player_name = normalize_player_name(player_data.get('name', ''))
-                        
-                        # Skip if player already exists (case-insensitive)
-                        if player_name in existing_names:
+                        name = str(row.get('name', '')).strip().title()
+                        if not name or any(p['name'].lower() == name.lower() for p in players):
                             skipped += 1
                             continue
                         
-                        # Ensure position is valid (case-insensitive)
-                        if 'position' in player_data:
-                            position_lower = str(player_data['position']).lower()
-                            for pos in POSITIONS:
-                                if pos.lower() == position_lower:
-                                    player_data['position'] = pos
-                                    break
-                        
-                        if add_player(player_data):
-                            count += 1
-                            existing_names[player_name] = True
+                        players.append({
+                            'name': name,
+                            'position': row.get('position', 'Midfielder'),
+                            'running_ability': max(1, min(10, int(row.get('running_ability', 5)))),
+                            'goal_scoring': max(1, min(10, int(row.get('goal_scoring', 5)))),
+                            'age': max(10, min(60, int(row.get('age', 25)))),
+                            'height': max(140, min(220, int(row.get('height', 175)))),
+                            'overall_skill': max(1, min(10, int(row.get('overall_skill', 5)))),
+                            'created_at': datetime.now().isoformat()
+                        })
+                        imported += 1
                     
-                    if count > 0:
-                        st.success(f"✅ Imported {count} players")
-                    if skipped > 0:
-                        st.info(f"ℹ️ Skipped {skipped} duplicate players")
+                    save_players(players)
+                    st.success(f"✅ Imported {imported} players! (Skipped {skipped} duplicates)")
+                    st.balloons()
+                    st.rerun()
                     
-                    if count > 0:
-                        st.rerun()
-                except Exception as e:
-                    st.error(f"Error: {e}")
-
-# RELATIONSHIPS PAGE  
-elif st.session_state.page == 'relationships':
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown('<h2>Relationships</h2>', unsafe_allow_html=True)
-    st.markdown('<p>Define partnerships and conflicts</p>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    players = load_players()
-    partnerships = load_partnerships()
-    conflicts = load_conflicts()
-    
-    if not players:
-        st.warning("Add players first")
-    else:
-        tab1, tab2 = st.tabs(["Partnerships", "Conflicts"])
+            except Exception as e:
+                st.error(f"❌ Error: {str(e)}")
         
-        with tab1:
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown('<div class="card">', unsafe_allow_html=True)
-                st.subheader("Add Partnership")
-                p1 = st.selectbox("Player 1", [p['name'] for p in players], key="p1")
-                remaining = [p['name'] for p in players if p['name'] != p1]
-                
-                if remaining:
-                    p2 = st.selectbox("Player 2", remaining, key="p2")
-                    if st.button("Add", use_container_width=True, type="primary"):
-                        if add_partnership(p1, p2) and add_partnership(p2, p1):
-                            st.success("✅ Added")
-                            st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
-            
-            with col2:
-                st.markdown('<div class="card">', unsafe_allow_html=True)
-                st.subheader("Existing")
-                if partnerships:
-                    displayed = set()
-                    for player, partners in partnerships.items():
-                        for partner in partners:
-                            pair = tuple(sorted([player, partner]))
-                            if pair not in displayed:
-                                displayed.add(pair)
-                                c1, c2 = st.columns([3, 1])
-                                c1.write(f"{pair[0]} ↔️ {pair[1]}")
-                                if c2.button("×", key=f"rp{pair}"):
-                                    if delete_partnership(pair[0], pair[1]):
-                                        st.rerun()
-                else:
-                    st.info("No partnerships")
-                st.markdown('</div>', unsafe_allow_html=True)
-        
-        with tab2:
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown('<div class="card">', unsafe_allow_html=True)
-                st.subheader("Add Conflict")
-                c1 = st.selectbox("Player 1", [p['name'] for p in players], key="c1")
-                remaining = [p['name'] for p in players if p['name'] != c1]
-                
-                if remaining:
-                    c2 = st.selectbox("Player 2", remaining, key="c2")
-                    if st.button("Add", use_container_width=True, type="primary"):
-                        if add_conflict(c1, c2) and add_conflict(c2, c1):
-                            st.success("✅ Added")
-                            st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
-            
-            with col2:
-                st.markdown('<div class="card">', unsafe_allow_html=True)
-                st.subheader("Existing")
-                if conflicts:
-                    displayed = set()
-                    for player, conflict_list in conflicts.items():
-                        for conflict in conflict_list:
-                            pair = tuple(sorted([player, conflict]))
-                            if pair not in displayed:
-                                displayed.add(pair)
-                                c1, c2 = st.columns([3, 1])
-                                c1.write(f"{pair[0]} ⚠️ {pair[1]}")
-                                if c2.button("×", key=f"rc{pair}"):
-                                    if delete_conflict(pair[0], pair[1]):
-                                        st.rerun()
-                else:
-                    st.info("No conflicts")
-                st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-# CREATE GAME PAGE
 elif st.session_state.page == 'game':
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown('<h2>Create Game</h2>', unsafe_allow_html=True)
-    st.markdown('<p>Select players and generate balanced teams</p>', unsafe_allow_html=True)
+    st.markdown('<h1>🎯 Create Balanced Teams</h1>', unsafe_allow_html=True)
+    st.markdown('<p style="font-size: 1.1rem; color: #718096;">Select players and generate perfectly balanced teams</p>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
     
     players = load_players()
     
     if not players:
-        st.warning("Add players first")
+        st.warning("📭 No players available. Please add players first!")
+        if st.button("➕ Go to Player Management"):
+            st.session_state.page = 'players'
+            st.rerun()
     else:
-        col1, col2 = st.columns([2, 1])
+        st.markdown('<div class="card">', unsafe_allow_html=True)
         
+        # Player selection
+        st.subheader("1️⃣ Select Players for This Game")
+        
+        col1, col2 = st.columns([4, 1])
         with col1:
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            game_name = st.text_input("Game Name", f"Game {len(load_games()) + 1}")
-            
-            col_a, col_b = st.columns(2)
-            if col_a.button("Select All", use_container_width=True):
-                st.session_state.selected_all = True
-                st.rerun()
-            if col_b.button("Clear", use_container_width=True):
-                st.session_state.selected_all = False
-                st.rerun()
-            
-            selected = []
-            for player in players:
-                default = st.session_state.get('selected_all', True)
-                if st.checkbox(f"{player['name']} ({player.get('position', 'N/A')}) - {player.get('overall_skill', 5)}/10",
-                             value=default, key=f"sel{player['name']}"):
-                    selected.append(player)
-            st.markdown('</div>', unsafe_allow_html=True)
+            if 'selected_players' not in st.session_state:
+                st.session_state.selected_players = set()
         
         with col2:
+            if st.button("Select All", use_container_width=True):
+                st.session_state.selected_players = set(range(len(players)))
+                st.rerun()
+            if st.button("Clear All", use_container_width=True):
+                st.session_state.selected_players = set()
+                st.rerun()
+        
+        # Display players in a grid
+        cols_per_row = 3
+        for i in range(0, len(players), cols_per_row):
+            cols = st.columns(cols_per_row)
+            for j, col in enumerate(cols):
+                if i + j < len(players):
+                    idx = i + j
+                    player = players[idx]
+                    with col:
+                        is_selected = idx in st.session_state.selected_players
+                        if st.checkbox(
+                            f"⚽ **{player['name']}** ({player.get('position', 'N/A')})\n"
+                            f"Skill: {player.get('overall_skill', 5)}/10",
+                            value=is_selected,
+                            key=f"player_select_{idx}"
+                        ):
+                            st.session_state.selected_players.add(idx)
+                        else:
+                            st.session_state.selected_players.discard(idx)
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Team generation
+        selected_count = len(st.session_state.selected_players)
+        
+        if selected_count > 0:
             st.markdown('<div class="card">', unsafe_allow_html=True)
-            st.write(f"**{len(selected)} selected**")
+            st.subheader("2️⃣ Set Number of Teams")
             
-            if len(selected) >= 2:
-                num_teams = st.number_input("Teams", 2, min(len(selected), 10), 2)
-                
-                with st.expander("Lock Players"):
-                    for i in range(num_teams):
-                        locked = st.multiselect(f"Team {i+1}", [p['name'] for p in selected], key=f"lock{i}")
-                        for pname in locked:
-                            st.session_state.locked_players[pname] = i
+            col1, col2, col3 = st.columns([2, 2, 1])
+            
+            with col1:
+                st.info(f"✅ {selected_count} players selected")
+            
+            with col2:
+                max_teams = min(10, selected_count)
+                num_teams = st.number_input(
+                    "Number of teams",
+                    min_value=2,
+                    max_value=max_teams,
+                    value=min(3, max_teams),
+                    step=1
+                )
+            
+            with col3:
+                st.info(f"~{selected_count // num_teams} per team")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if st.button("⚡ Generate Teams", type="primary", use_container_width=True):
+                    selected_players_list = [players[i] for i in sorted(st.session_state.selected_players)]
+                    
+                    with st.spinner("🔄 Generating balanced teams..."):
+                        teams = generate_balanced_teams(selected_players_list, num_teams)
+                        
+                        if teams:
+                            st.session_state.generated_teams = teams
+                            st.session_state.last_generation_timestamp = datetime.now()
+                            st.success("✅ Teams generated successfully!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to generate teams. Try different settings.")
+            
+            with col2:
+                if st.session_state.generated_teams:
+                    if st.button("🔄 Regenerate Different Teams", use_container_width=True):
+                        selected_players_list = [players[i] for i in sorted(st.session_state.selected_players)]
+                        
+                        with st.spinner("🔄 Regenerating..."):
+                            # Force new random seed
+                            random.seed(datetime.now().timestamp())
+                            teams = generate_balanced_teams(selected_players_list, num_teams)
+                            
+                            if teams:
+                                st.session_state.generated_teams = teams
+                                st.session_state.last_generation_timestamp = datetime.now()
+                                st.success("✅ New teams generated!")
+                                st.rerun()
+            
             st.markdown('</div>', unsafe_allow_html=True)
         
-        if len(selected) >= num_teams * 2:
-            if st.button("⚡ Generate Teams", type="primary", use_container_width=True):
-                with st.spinner("Optimizing..."):
-                    teams = balance_teams_advanced(selected, num_teams, 
-                                                  load_partnerships(), load_conflicts(),
-                                                  st.session_state.locked_players)
-                    st.session_state.generated_teams = teams
-                    st.session_state.game_name = game_name
-                    st.success("✅ Generated")
-                    st.rerun()
-        
+        # Display generated teams
         if st.session_state.generated_teams:
-            st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
+            st.markdown('<div class="card">', unsafe_allow_html=True)
+            st.subheader("3️⃣ Your Balanced Teams")
             
-            col1, col2, col3 = st.columns(3)
-            if col1.button("🔄 Regenerate", use_container_width=True):
-                teams = balance_teams_advanced(selected, len(st.session_state.generated_teams),
-                                              load_partnerships(), load_conflicts(),
-                                              st.session_state.locked_players)
-                st.session_state.generated_teams = teams
-                st.rerun()
+            teams = st.session_state.generated_teams
+            team_colors = ["team-1", "team-2", "team-3", "team-4", "team-5"]
             
-            if col2.button("💾 Save", use_container_width=True, type="primary"):
-                game_data = {
-                    'name': st.session_state.game_name,
-                    'num_teams': len(st.session_state.generated_teams),
-                    'total_players': sum(len(t) for t in st.session_state.generated_teams),
-                    'teams': st.session_state.generated_teams
-                }
-                if save_game(game_data):
-                    st.success("✅ Saved")
-            
-            if col3.button("Clear Locks", use_container_width=True):
-                st.session_state.locked_players = {}
-                st.rerun()
-            
-            for idx, team in enumerate(st.session_state.generated_teams):
-                color = TEAM_COLORS[idx % len(TEAM_COLORS)]
-                metrics = calculate_team_metrics(team)
+            for idx, team in enumerate(teams):
+                team_num = idx + 1
+                color_class = team_colors[idx % len(team_colors)]
+                
+                # Calculate team stats
+                avg_skill = sum(p.get('overall_skill', 5) for p in team) / len(team)
+                avg_running = sum(p.get('running_ability', 5) for p in team) / len(team)
+                avg_goals = sum(p.get('goal_scoring', 5) for p in team) / len(team)
                 
                 st.markdown(f"""
-                <div class="team-card team-card-{color}">
-                    <h3 style="margin: 0; font-size: 20px;">Team {idx + 1}</h3>
-                    <div style="opacity: 0.9; margin-top: 8px; font-size: 14px;">
-                        {len(team)} players • Score: {metrics['total_score']:.1f}
+                <div class="team-card {color_class}">
+                    <h3>Team {team_num} ({len(team)} players)</h3>
+                    <div style="display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
+                        <span>⭐ Avg Skill: {avg_skill:.1f}</span>
+                        <span>🏃 Running: {avg_running:.1f}</span>
+                        <span>⚽ Goals: {avg_goals:.1f}</span>
                     </div>
-                </div>
                 """, unsafe_allow_html=True)
                 
-                col1, col2, col3, col4, col5 = st.columns(5)
-                col1.metric("Running", f"{metrics['avg_running']:.1f}")
-                col2.metric("Goals", f"{metrics['avg_goals']:.1f}")
-                col3.metric("Skill", f"{metrics['avg_skill']:.1f}")
-                col4.metric("Age", f"{metrics['avg_age']:.0f}")
-                col5.metric("Height", f"{metrics['avg_height']:.0f}cm")
-                
                 for player in team:
-                    pos = player.get('position', 'Midfielder').lower()
                     st.markdown(f"""
-                    <div class="player-card">
-                        <div style="font-size: 15px; font-weight: 600; margin-bottom: 4px;">
-                            <span class="badge badge-{pos}">{player.get('position', 'MID')[:3]}</span>
-                            {player['name']}
-                        </div>
-                        <div style="font-size: 13px; color: #666;">
-                            Run: {player.get('running_ability', 5)}/10 • 
-                            Goal: {player.get('goal_scoring', 5)}/10 • 
-                            Skill: {player.get('overall_skill', 5)}/10
+                    <div class="player-item">
+                        <div class="player-name">{player['name']}</div>
+                        <div class="player-stats">
+                            {player.get('position', 'N/A')} | 
+                            Skill: {player.get('overall_skill', 5)}/10 | 
+                            Run: {player.get('running_ability', 5)}/10 | 
+                            Goals: {player.get('goal_scoring', 5)}/10
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
+                
+                st.markdown("</div>", unsafe_allow_html=True)
+            
+            # Save game button
+            if st.button("💾 Save This Game to History", type="primary", use_container_width=True):
+                game_data = {
+                    'created_at': datetime.now().isoformat(),
+                    'num_teams': len(teams),
+                    'num_players': sum(len(team) for team in teams),
+                    'teams': [
+                        {
+                            'team_number': i + 1,
+                            'players': [p['name'] for p in team],
+                            'avg_skill': sum(p.get('overall_skill', 5) for p in team) / len(team)
+                        }
+                        for i, team in enumerate(teams)
+                    ]
+                }
+                save_game(game_data)
+                st.success("✅ Game saved to history!")
+                st.balloons()
+            
+            st.markdown('</div>', unsafe_allow_html=True)
 
-# HISTORY PAGE
 elif st.session_state.page == 'history':
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown('<h2>Game History</h2>', unsafe_allow_html=True)
-    st.markdown('<p>View past games</p>', unsafe_allow_html=True)
+    st.markdown('<h1>📊 Game History</h1>', unsafe_allow_html=True)
+    st.markdown('<p style="font-size: 1.1rem; color: #718096;">Review all your past games and team compositions</p>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
     
     games = load_games()
     
     if not games:
-        st.info("No games yet")
+        st.info("📭 No games played yet. Create your first game to see history here!")
+        if st.button("🎯 Create New Game", type="primary"):
+            st.session_state.page = 'game'
+            st.rerun()
     else:
-        for game in games:
-            with st.expander(f"🎮 {game['name']} - {game.get('created_at', '')[:10] if game.get('created_at') else 'No date'}"):
-                st.markdown('<div class="card">', unsafe_allow_html=True)
-                st.write(f"**Teams:** {game['num_teams']}")
-                st.write(f"**Players:** {game['total_players']}")
-                
-                for team_idx, team in enumerate(game.get('teams', [])):
-                    st.markdown(f"**Team {team_idx + 1}:** {', '.join(p['name'] for p in team)}")
-                
-                if st.button("Delete", key=f"del{game['id']}", type="secondary"):
-                    if delete_game(game['id']):
-                        st.success("Deleted!")
-                        st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown(f"**Total Games: {len(games)}**")
+        
+        for idx, game in enumerate(games):
+            game_date = datetime.fromisoformat(game['created_at']).strftime("%B %d, %Y at %I:%M %p")
+            
+            st.markdown(f"""
+            <div class="history-card">
+                <div class="game-date">🗓️ {game_date}</div>
+                <div class="game-title">Game #{len(games) - idx}</div>
+                <p style="color: #718096; margin: 0.5rem 0;">
+                    {game['num_teams']} teams • {game['num_players']} players
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            with st.expander("View Team Details"):
+                for team in game['teams']:
+                    st.markdown(f"### Team {team['team_number']}")
+                    st.markdown(f"**Average Skill:** {team['avg_skill']:.1f}/10")
+                    st.markdown("**Players:**")
+                    for player_name in team['players']:
+                        st.markdown(f"- ⚽ {player_name}")
+                    st.markdown("---")
