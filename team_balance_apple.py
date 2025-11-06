@@ -233,12 +233,13 @@ st.markdown("""
     
     .stButton > button[kind="primary"] {
         background: #000000 !important;
-        color: white !important;
+        color: #ffffff !important;
         border: none !important;
     }
     
     .stButton > button[kind="primary"]:hover {
         background: #1a1a1a;
+        color: #ffffff;
         box-shadow: 0 8px 20px rgba(0,0,0,0.15);
     }
     
@@ -1119,7 +1120,7 @@ elif st.session_state.page == 'game':
                 teams_text += f"TEAM {team_num}\n"
                 teams_text += "=" * 40 + "\n"
                 for player in team:
-                    teams_text += f"⚽ {player['name']} /10\n"
+                    teams_text += f"⚽ {player['name']}\n"
                 teams_text += "\n"
             
             st.text_area(
