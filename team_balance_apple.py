@@ -232,9 +232,9 @@ st.markdown("""
     }
     
     .stButton > button[kind="primary"] {
-        background: #000000;
+        background: #000000 !important;
         color: white !important;
-        border: none;
+        border: none !important;
     }
     
     .stButton > button[kind="primary"]:hover {
@@ -1108,6 +1108,27 @@ elif st.session_state.page == 'game':
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
+            
+            # Copyable text format
+            st.markdown("---")
+            st.subheader("📋 Copy Teams")
+            
+            teams_text = ""
+            for idx, team in enumerate(teams):
+                team_num = idx + 1
+                teams_text += f"TEAM {team_num}\n"
+                teams_text += "=" * 40 + "\n"
+                for player in team:
+                    teams_text += f"⚽ {player['name']} /10\n"
+                teams_text += "\n"
+            
+            st.text_area(
+                "Copy and share your teams:",
+                value=teams_text,
+                height=300,
+                key="teams_copy_text"
+            )
+            
             
             # Save game button
             if st.button("💾 Save This Game to History", type="primary", use_container_width=True):
