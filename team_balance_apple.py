@@ -8,13 +8,29 @@ from io import StringIO
 import os
 
 # Supabase setup (if using cloud version)
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+# Try Streamlit secrets first (for Streamlit Cloud), then fall back to environment variables
+try:
+    SUPABASE_URL = st.secrets.get("SUPABASE_URL", "") or os.getenv("SUPABASE_URL", "")
+    SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "") or os.getenv("SUPABASE_KEY", "")
+except:
+    SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+    SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+
 USE_SUPABASE = bool(SUPABASE_URL and SUPABASE_KEY)
 
 if USE_SUPABASE:
-    from supabase import create_client
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    try:
+        from supabase import create_client
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        # Test connection
+        supabase.table('players').select("count", count='exact').limit(1).execute()
+        st.session_state.supabase_connected = True
+    except Exception as e:
+        st.session_state.supabase_connected = False
+        USE_SUPABASE = False
+        print(f"Supabase connection failed: {e}")
+else:
+    st.session_state.supabase_connected = False
 
 # Constants
 POSITIONS = ["Forward", "Midfielder", "Defender", "Goalkeeper"]
@@ -488,17 +504,30 @@ with st.sidebar:
         st.rerun()
     
     st.markdown("---")
+    
+    # Connection status
+    if USE_SUPABASE and st.session_state.get('supabase_connected', False):
+        st.success("☁️ Cloud Connected")
+    else:
+        st.info("💾 Using Local Storage")
+    
+    st.markdown("---")
     st.markdown("**Team Balance Pro**")
     st.markdown("v2.0")
 
 # Page routing
 if st.session_state.page == 'home':
     # Hero section with logo
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        try:
+            st.image("logo.png", width=150)
+        except:
+            # Fallback if logo.png not found
+            st.markdown("### ⚽")
+    
     st.markdown("""
     <div class="hero">
-        <div class="logo-container">
-            <img src="logo.png" class="logo" alt="Team Balance Pro Logo" />
-        </div>
         <h1>⚽ Team Balance Pro</h1>
         <p>Create perfectly balanced teams in seconds</p>
     </div>
