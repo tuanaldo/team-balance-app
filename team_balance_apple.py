@@ -58,11 +58,11 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS - Mobile-First & Apple-Inspired
+# Custom CSS - Mobile-First & Modern Black/White Design
 st.markdown("""
 <style>
-    /* Import Apple-like font */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    /* Import font */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     
     * {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -75,6 +75,7 @@ st.markdown("""
     .main .block-container {
         padding: 1rem 1rem 3rem 1rem;
         max-width: 100%;
+        background: #fafafa;
     }
     
     /* Mobile responsive adjustments */
@@ -84,113 +85,254 @@ st.markdown("""
         }
     }
     
-    /* Hero section */
-    .hero {
-        text-align: center;
-        padding: 3rem 1rem;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 20px;
-        color: white;
-        margin-bottom: 2rem;
-        box-shadow: 0 10px 40px rgba(102, 126, 234, 0.3);
-    }
-    
-    .hero h1 {
-        font-size: 2.5rem;
-        font-weight: 700;
-        margin-bottom: 0.5rem;
-        text-shadow: 0 2px 10px rgba(0,0,0,0.2);
-    }
-    
-    @media (max-width: 768px) {
-        .hero h1 {
-            font-size: 1.8rem;
-        }
-    }
-    
-    .hero p {
-        font-size: 1.1rem;
-        opacity: 0.95;
-        margin-top: 0.5rem;
-    }
-    
-    @media (max-width: 768px) {
-        .hero p {
-            font-size: 0.95rem;
-        }
-    }
-    
-    /* Cards */
+    /* Cards - with dark mode support */
     .card {
         background: white;
         border-radius: 16px;
         padding: 1.5rem;
         margin-bottom: 1.5rem;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        border: 1px solid #e5e5e5;
         transition: all 0.3s ease;
+        color: #000000 !important;
     }
     
     .card:hover {
-        box-shadow: 0 4px 20px rgba(0,0,0,0.12);
-        transform: translateY(-2px);
+        border-color: #000000;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
     }
     
-    /* Metric cards */
-    .metric-card {
-        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    /* Dark mode support - force text visibility */
+    .card *, .card p, .card span, .card div {
+        color: #000000 !important;
+    }
+    
+    .card h1, .card h2, .card h3, .card h4, .card h5, .card h6 {
+        color: #000000 !important;
+    }
+    
+    /* Header card */
+    .header-card {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+        background: white;
         border-radius: 16px;
-        padding: 1.5rem;
-        text-align: center;
-        margin-bottom: 1rem;
+        padding: 2rem;
+        margin-bottom: 3rem;
+        border: 1px solid #e5e5e5;
+        flex-wrap: wrap;
     }
     
-    .metric-card h3 {
-        font-size: 2rem;
-        margin-bottom: 0.5rem;
+    .header-card * {
+        color: #000000 !important;
     }
     
-    .metric-card h4 {
-        font-size: 1.1rem;
-        font-weight: 600;
-        margin-bottom: 0.5rem;
-        color: #2d3748;
+    .logo-box {
+        width: 80px;
+        height: 80px;
+        background: #000000;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2.5rem;
+        flex-shrink: 0;
     }
     
-    .metric-card p {
-        font-size: 0.9rem;
-        color: #4a5568;
+    .app-title {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #000000 !important;
         margin: 0;
+        letter-spacing: -0.02em;
     }
     
-    /* Team cards with gradients */
+    @media (max-width: 768px) {
+        .header-card {
+            flex-direction: column;
+            text-align: center;
+            padding: 1.5rem;
+        }
+        
+        .app-title {
+            font-size: 2rem;
+        }
+        
+        .logo-box {
+            width: 64px;
+            height: 64px;
+            font-size: 2rem;
+        }
+    }
+    
+    /* Stat cards */
+    .stat-card {
+        background: white;
+        border-radius: 16px;
+        padding: 2rem 1.5rem;
+        text-align: center;
+        border: 1px solid #e5e5e5;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-4px);
+        border-color: #000000;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+    
+    .stat-card * {
+        color: #000000 !important;
+    }
+    
+    .stat-value {
+        font-size: 3rem;
+        font-weight: 700;
+        color: #000000 !important;
+        letter-spacing: -0.02em;
+        margin-bottom: 0.5rem;
+    }
+    
+    .stat-label {
+        font-size: 0.95rem;
+        color: #737373 !important;
+        font-weight: 500;
+    }
+    
+    @media (max-width: 768px) {
+        .stat-card {
+            padding: 1.5rem 1rem;
+        }
+        
+        .stat-value {
+            font-size: 2.25rem;
+        }
+        
+        .stat-label {
+            font-size: 0.85rem;
+        }
+    }
+    
+    /* Buttons */
+    .stButton > button {
+        border-radius: 12px;
+        font-weight: 600;
+        padding: 0.75rem 2rem;
+        transition: all 0.3s ease;
+        border: 1px solid #e5e5e5;
+        background: white;
+        color: #000000 !important;
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        border-color: #000000;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+    
+    .stButton > button[kind="primary"] {
+        background: #000000;
+        color: white !important;
+        border: none;
+    }
+    
+    .stButton > button[kind="primary"]:hover {
+        background: #1a1a1a;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+    }
+    
+    /* Form inputs - ensure text is visible */
+    .stTextInput > div > div > input,
+    .stNumberInput > div > div > input,
+    .stSelectbox > div > div > div,
+    .stTextArea textarea {
+        border-radius: 10px;
+        border: 1px solid #e5e5e5;
+        padding: 0.75rem;
+        font-size: 1rem;
+        background: white !important;
+        color: #000000 !important;
+    }
+    
+    .stTextInput > div > div > input:focus,
+    .stNumberInput > div > div > input:focus,
+    .stSelectbox > div > div > div:focus,
+    .stTextArea textarea:focus {
+        border-color: #000000;
+        box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+    }
+    
+    /* Sliders */
+    .stSlider > div > div > div > div {
+        background: #000000;
+    }
+    
+    /* Success/Error messages - ensure visibility */
+    .stSuccess, .stError, .stWarning, .stInfo {
+        border-radius: 12px;
+        padding: 1rem;
+        margin: 1rem 0;
+        background: white !important;
+        border: 1px solid #e5e5e5;
+    }
+    
+    .stSuccess *, .stError *, .stWarning *, .stInfo * {
+        color: #000000 !important;
+    }
+    
+    /* Sidebar */
+    [data-testid="stSidebar"] {
+        background: #fafafa;
+    }
+    
+    [data-testid="stSidebar"] * {
+        color: #000000 !important;
+    }
+    
+    [data-testid="stSidebar"] .stButton > button {
+        width: 100%;
+        margin-bottom: 0.5rem;
+        background: white;
+        color: #000000 !important;
+        border: 1px solid #e5e5e5;
+    }
+    
+    [data-testid="stSidebar"] .stButton > button:hover {
+        border-color: #000000;
+        background: white;
+    }
+    
+    /* Team cards - dark mode safe */
     .team-card {
         border-radius: 16px;
         padding: 1.5rem;
         margin-bottom: 1.5rem;
-        color: white;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        background: white;
+        border: 2px solid #000000;
+        color: #000000 !important;
     }
     
-    .team-1 { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-    .team-2 { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
-    .team-3 { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
-    .team-4 { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
-    .team-5 { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
+    .team-card * {
+        color: #000000 !important;
+    }
     
     .team-card h3 {
         font-size: 1.5rem;
         font-weight: 700;
         margin-bottom: 1rem;
-        text-shadow: 0 2px 4px rgba(0,0,0,0.2);
     }
     
     .player-item {
-        background: rgba(255, 255, 255, 0.2);
-        backdrop-filter: blur(10px);
+        background: #fafafa;
         padding: 0.75rem;
         border-radius: 10px;
         margin-bottom: 0.5rem;
-        border: 1px solid rgba(255, 255, 255, 0.3);
+        border: 1px solid #e5e5e5;
+    }
+    
+    .player-item * {
+        color: #000000 !important;
     }
     
     .player-name {
@@ -200,69 +342,8 @@ st.markdown("""
     
     .player-stats {
         font-size: 0.85rem;
-        opacity: 0.9;
+        color: #525252 !important;
         margin-top: 0.25rem;
-    }
-    
-    /* Buttons */
-    .stButton > button {
-        border-radius: 12px;
-        font-weight: 600;
-        padding: 0.75rem 2rem;
-        transition: all 0.3s ease;
-        border: none;
-    }
-    
-    .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(0,0,0,0.15);
-    }
-    
-    /* Form inputs */
-    .stTextInput > div > div > input,
-    .stNumberInput > div > div > input,
-    .stSelectbox > div > div > div {
-        border-radius: 10px;
-        border: 2px solid #e2e8f0;
-        padding: 0.75rem;
-        font-size: 1rem;
-    }
-    
-    .stTextInput > div > div > input:focus,
-    .stNumberInput > div > div > input:focus,
-    .stSelectbox > div > div > div:focus {
-        border-color: #667eea;
-        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-    }
-    
-    /* Sliders */
-    .stSlider > div > div > div > div {
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-    }
-    
-    /* Success/Error messages */
-    .stSuccess, .stError, .stWarning, .stInfo {
-        border-radius: 12px;
-        padding: 1rem;
-        margin: 1rem 0;
-    }
-    
-    /* Sidebar */
-    [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #f7fafc 0%, #edf2f7 100%);
-    }
-    
-    [data-testid="stSidebar"] .stButton > button {
-        width: 100%;
-        margin-bottom: 0.5rem;
-        background: white;
-        color: #2d3748;
-        border: 2px solid transparent;
-    }
-    
-    [data-testid="stSidebar"] .stButton > button:hover {
-        border-color: #667eea;
-        background: #f7fafc;
     }
     
     /* Tabs */
@@ -274,55 +355,35 @@ st.markdown("""
         border-radius: 10px 10px 0 0;
         padding: 0.75rem 1.5rem;
         font-weight: 600;
+        background: white;
+        border: 1px solid #e5e5e5;
+        color: #000000 !important;
     }
     
-    /* Mobile improvements */
-    @media (max-width: 768px) {
-        .player-item {
-            font-size: 0.9rem;
-            padding: 0.6rem;
-        }
-        
-        .team-card h3 {
-            font-size: 1.3rem;
-        }
-        
-        .stButton > button {
-            padding: 0.6rem 1.5rem;
-            font-size: 0.9rem;
-        }
-        
-        /* Make sure text is visible on mobile */
-        .stMarkdown, .stText, p, span, div {
-            color: inherit !important;
-        }
+    .stTabs [data-baseweb="tab"][aria-selected="true"] {
+        background: #000000;
+        color: white !important;
     }
     
-    /* Logo */
-    .logo-container {
-        text-align: center;
-        margin: 2rem 0;
-    }
-    
-    .logo {
-        width: 120px;
-        height: 120px;
-        margin: 0 auto;
-    }
-    
-    /* Expander improvements */
+    /* Expander */
     .streamlit-expanderHeader {
         font-weight: 600;
         font-size: 1.05rem;
-        background: #f7fafc;
+        background: white;
+        border: 1px solid #e5e5e5;
         border-radius: 10px;
         padding: 0.75rem 1rem;
+        color: #000000 !important;
+    }
+    
+    .streamlit-expanderHeader * {
+        color: #000000 !important;
     }
     
     /* History cards */
     .history-card {
         background: white;
-        border: 2px solid #e2e8f0;
+        border: 1px solid #e5e5e5;
         border-radius: 12px;
         padding: 1.25rem;
         margin-bottom: 1rem;
@@ -330,21 +391,40 @@ st.markdown("""
     }
     
     .history-card:hover {
-        border-color: #667eea;
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+        border-color: #000000;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+    
+    .history-card * {
+        color: #000000 !important;
     }
     
     .game-date {
         font-size: 0.9rem;
-        color: #718096;
+        color: #737373 !important;
         font-weight: 500;
     }
     
     .game-title {
         font-size: 1.2rem;
         font-weight: 700;
-        color: #2d3748;
+        color: #000000 !important;
         margin: 0.5rem 0;
+    }
+    
+    /* Checkbox labels - ensure visibility */
+    .stCheckbox label {
+        color: #000000 !important;
+    }
+    
+    /* All text elements - force black in light areas */
+    p, span, div, label {
+        color: #000000 !important;
+    }
+    
+    /* Markdown text */
+    .stMarkdown {
+        color: #000000 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -588,25 +668,17 @@ with st.sidebar:
 
 # Page routing
 if st.session_state.page == 'home':
-    # Hero section with logo
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        try:
-            st.image("logo.png", width=150)
-        except:
-            # Fallback if logo.png not found
-            st.markdown("### ⚽")
-    
+    # Header with Logo and Title
     st.markdown("""
-    <div class="hero">
-        <h1>⚽ Team Balance Pro</h1>
-        <p>Create perfectly balanced teams in seconds</p>
+    <div class="header-card">
+        <div class="logo-box">⚽</div>
+        <h1 class="app-title">Team Balancer Pro</h1>
     </div>
     """, unsafe_allow_html=True)
     
     # Debug section (shows if not connected)
     if not (USE_SUPABASE and st.session_state.get('supabase_connected', False)):
-        with st.expander("🔍 Connection Debug Info", expanded=True):
+        with st.expander("🔍 Connection Debug Info", expanded=False):
             st.warning("⚠️ Not connected to Supabase - using local storage")
             
             st.write("**Configuration Check:**")
@@ -649,39 +721,7 @@ if st.session_state.page == 'home':
                 st.write("3. Click Save")
                 st.write("4. App will restart automatically")
     
-    # Feature cards
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown("""
-        <div class="metric-card">
-            <h3>👥</h3>
-            <h4>Player Inventory</h4>
-            <p>Manage your permanent player roster with detailed stats</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown("""
-        <div class="metric-card">
-            <h3>🎯</h3>
-            <h4>Smart Balancing</h4>
-            <p>AI-powered team generation with position awareness</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        st.markdown("""
-        <div class="metric-card">
-            <h3>📊</h3>
-            <h4>Game History</h4>
-            <p>Track all your past games and team compositions</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    # Quick stats
+    # Stats Grid
     players = load_players()
     games = load_games()
     
@@ -689,26 +729,26 @@ if st.session_state.page == 'home':
     
     with col1:
         st.markdown(f"""
-        <div class="card" style="text-align: center;">
-            <h2 style="color: #667eea; margin: 0;">{len(players)}</h2>
-            <p style="margin: 0.5rem 0 0 0; color: #718096;">Total Players</p>
+        <div class="stat-card">
+            <div class="stat-value">{len(players)}</div>
+            <div class="stat-label">Total Players</div>
         </div>
         """, unsafe_allow_html=True)
     
     with col2:
         st.markdown(f"""
-        <div class="card" style="text-align: center;">
-            <h2 style="color: #764ba2; margin: 0;">{len(games)}</h2>
-            <p style="margin: 0.5rem 0 0 0; color: #718096;">Games Played</p>
+        <div class="stat-card">
+            <div class="stat-value">{len(games)}</div>
+            <div class="stat-label">Games Played</div>
         </div>
         """, unsafe_allow_html=True)
     
     with col3:
         avg_skill = sum(p.get('overall_skill', 5) for p in players) / len(players) if players else 0
         st.markdown(f"""
-        <div class="card" style="text-align: center;">
-            <h2 style="color: #f5576c; margin: 0;">{avg_skill:.1f}</h2>
-            <p style="margin: 0.5rem 0 0 0; color: #718096;">Avg Skill</p>
+        <div class="stat-card">
+            <div class="stat-value">{avg_skill:.1f}</div>
+            <div class="stat-label">Avg Skill</div>
         </div>
         """, unsafe_allow_html=True)
     
@@ -719,20 +759,23 @@ if st.session_state.page == 'home':
             positions_count[pos] = positions_count.get(pos, 0) + 1
         most_common = max(positions_count, key=positions_count.get)[:3] if positions_count else "N/A"
         st.markdown(f"""
-        <div class="card" style="text-align: center;">
-            <h2 style="color: #00f2fe; margin: 0;">{most_common}</h2>
-            <p style="margin: 0.5rem 0 0 0; color: #718096;">Top Position</p>
+        <div class="stat-card">
+            <div class="stat-value">{most_common}</div>
+            <div class="stat-label">Top Position</div>
         </div>
         """, unsafe_allow_html=True)
     
     st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
     
-    # Call to action
+    # CTA Button
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         if st.button("🎯 Create New Game", use_container_width=True, type="primary"):
             st.session_state.page = 'game'
             st.rerun()
+    
+    # Version
+    st.markdown("<div style='text-align: center; margin-top: 2rem; color: #a3a3a3; font-size: 0.9rem;'>v2.0</div>", unsafe_allow_html=True)
 
 elif st.session_state.page == 'players':
     st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -758,7 +801,7 @@ elif st.session_state.page == 'players':
                 goals = st.slider("Goal Scoring", 1, 10, 5, key="new_player_goals")
             
             with col2:
-                age = st.number_input("Age", 10, 100, 25, key="new_player_age")
+                age = st.number_input("Age", 10, 60, 25, key="new_player_age")
                 height = st.number_input("Height (cm)", 140, 220, 175, key="new_player_height")
                 skill = st.slider("Overall Skill", 1, 10, 5, key="new_player_skill")
             
@@ -810,7 +853,7 @@ elif st.session_state.page == 'players':
                                 new_goals = st.slider("Goals", 1, 10, player.get('goal_scoring', 5), key=f"edit_goal_{idx}")
                             
                             with c2:
-                                new_age = st.number_input("Age", 10, 100, player.get('age', 25), key=f"edit_age_{idx}")
+                                new_age = st.number_input("Age", 10, 60, player.get('age', 25), key=f"edit_age_{idx}")
                                 new_skill = st.slider("Skill", 1, 10, player.get('overall_skill', 5), key=f"edit_skill_{idx}")
                             
                             col_update, col_delete = st.columns(2)
@@ -897,7 +940,7 @@ elif st.session_state.page == 'players':
                             'position': row.get('position', 'Midfielder'),
                             'running_ability': max(1, min(10, int(row.get('running_ability', 5)))),
                             'goal_scoring': max(1, min(10, int(row.get('goal_scoring', 5)))),
-                            'age': max(10, min(100, int(row.get('age', 25)))),
+                            'age': max(10, min(60, int(row.get('age', 25)))),
                             'height': max(140, min(220, int(row.get('height', 175)))),
                             'overall_skill': max(1, min(10, int(row.get('overall_skill', 5)))),
                             'created_at': datetime.now().isoformat()
@@ -1034,11 +1077,9 @@ elif st.session_state.page == 'game':
             st.subheader("3️⃣ Your Balanced Teams")
             
             teams = st.session_state.generated_teams
-            team_colors = ["team-1", "team-2", "team-3", "team-4", "team-5"]
             
             for idx, team in enumerate(teams):
                 team_num = idx + 1
-                color_class = team_colors[idx % len(team_colors)]
                 
                 # Calculate team stats
                 avg_skill = sum(p.get('overall_skill', 5) for p in team) / len(team)
@@ -1046,9 +1087,9 @@ elif st.session_state.page == 'game':
                 avg_goals = sum(p.get('goal_scoring', 5) for p in team) / len(team)
                 
                 st.markdown(f"""
-                <div class="team-card {color_class}">
+                <div class="team-card">
                     <h3>Team {team_num} ({len(team)} players)</h3>
-                    <div style="display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
+                    <div style="display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; color: #000000;">
                         <span>⭐ Avg Skill: {avg_skill:.1f}</span>
                         <span>🏃 Running: {avg_running:.1f}</span>
                         <span>⚽ Goals: {avg_goals:.1f}</span>
@@ -1067,8 +1108,6 @@ elif st.session_state.page == 'game':
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
-                
-                st.markdown("</div>", unsafe_allow_html=True)
             
             # Save game button
             if st.button("💾 Save This Game to History", type="primary", use_container_width=True):
@@ -1121,10 +1160,16 @@ elif st.session_state.page == 'history':
             """, unsafe_allow_html=True)
             
             with st.expander("View Team Details"):
-                for team in game['teams']:
-                    st.markdown(f"### Team {team['team_number']}")
-                    st.markdown(f"**Average Skill:** {team['avg_skill']:.1f}/10")
+                for idx, team in enumerate(game['teams']):
+                    # Handle both old and new data formats
+                    team_num = team.get('team_number', idx + 1)
+                    avg_skill = team.get('avg_skill', 0)
+                    players_list = team.get('players', [])
+                    
+                    st.markdown(f"### Team {team_num}")
+                    if avg_skill > 0:
+                        st.markdown(f"**Average Skill:** {avg_skill:.1f}/10")
                     st.markdown("**Players:**")
-                    for player_name in team['players']:
+                    for player_name in players_list:
                         st.markdown(f"- ⚽ {player_name}")
                     st.markdown("---")
