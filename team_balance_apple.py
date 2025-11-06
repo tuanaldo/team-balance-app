@@ -339,12 +339,18 @@ st.markdown("""
 # Database functions
 def load_players():
     """Load players from Supabase or local JSON"""
-    if USE_SUPABASE:
+    if USE_SUPABASE and st.session_state.get('supabase_connected', False):
         try:
             response = supabase.table('players').select('*').execute()
-            return response.data
-        except:
-            pass
+            # Convert UUID to string for consistency
+            players = response.data
+            for player in players:
+                if 'id' in player:
+                    player['id'] = str(player['id'])
+            return players
+        except Exception as e:
+            st.error(f"Error loading players from Supabase: {e}")
+            return []
     
     # Fallback to local
     if os.path.exists(LOCAL_PLAYERS_FILE):
@@ -354,15 +360,32 @@ def load_players():
 
 def save_players(players):
     """Save players to Supabase or local JSON"""
-    if USE_SUPABASE:
+    if USE_SUPABASE and st.session_state.get('supabase_connected', False):
         try:
-            # Delete all and re-insert (simple approach)
-            supabase.table('players').delete().neq('id', 0).execute()
-            if players:
-                supabase.table('players').insert(players).execute()
+            # For each player, either insert or update
+            for player in players:
+                player_data = {
+                    'name': player['name'],
+                    'position': player.get('position', 'Midfielder'),
+                    'running_ability': player.get('running_ability', 5),
+                    'goal_scoring': player.get('goal_scoring', 5),
+                    'age': player.get('age', 25),
+                    'height': player.get('height', 175),
+                    'overall_skill': player.get('overall_skill', 5)
+                }
+                
+                if 'id' in player and player['id']:
+                    # Update existing player
+                    supabase.table('players').update(player_data).eq('id', player['id']).execute()
+                else:
+                    # Insert new player and get the ID back
+                    result = supabase.table('players').insert(player_data).execute()
+                    if result.data:
+                        player['id'] = str(result.data[0]['id'])
             return
-        except:
-            pass
+        except Exception as e:
+            st.error(f"Error saving players to Supabase: {e}")
+            # Fall through to local save
     
     # Fallback to local
     with open(LOCAL_PLAYERS_FILE, 'w') as f:
@@ -370,12 +393,23 @@ def save_players(players):
 
 def load_games():
     """Load game history from Supabase or local JSON"""
-    if USE_SUPABASE:
+    if USE_SUPABASE and st.session_state.get('supabase_connected', False):
         try:
             response = supabase.table('games').select('*').order('created_at', desc=True).execute()
-            return response.data
-        except:
-            pass
+            # Convert to format expected by the app and handle UUIDs
+            games = []
+            for game in response.data:
+                games.append({
+                    'id': str(game['id']),
+                    'created_at': game['created_at'],
+                    'num_teams': game['num_teams'],
+                    'num_players': game['total_players'],  # Map total_players to num_players
+                    'teams': game['teams']
+                })
+            return games
+        except Exception as e:
+            st.error(f"Error loading games from Supabase: {e}")
+            return []
     
     # Fallback to local
     if os.path.exists(LOCAL_GAMES_FILE):
@@ -385,19 +419,37 @@ def load_games():
 
 def save_game(game_data):
     """Save a game to history"""
-    games = load_games()
-    games.insert(0, game_data)
-    
-    if USE_SUPABASE:
+    if USE_SUPABASE and st.session_state.get('supabase_connected', False):
         try:
-            supabase.table('games').insert(game_data).execute()
+            # Format data to match Supabase schema
+            supabase_game = {
+                'name': game_data.get('name', f"Game {datetime.now().strftime('%Y-%m-%d %H:%M')}"),
+                'num_teams': game_data['num_teams'],
+                'total_players': game_data['num_players'],
+                'teams': game_data['teams']
+            }
+            supabase.table('games').insert(supabase_game).execute()
             return
-        except:
-            pass
+        except Exception as e:
+            st.error(f"Error saving game to Supabase: {e}")
+            # Fall through to local save
     
     # Fallback to local
+    games = load_games()
+    games.insert(0, game_data)
     with open(LOCAL_GAMES_FILE, 'w') as f:
         json.dump(games, f, indent=2)
+
+def delete_player(player_id):
+    """Delete a player from Supabase or local JSON"""
+    if USE_SUPABASE and st.session_state.get('supabase_connected', False):
+        try:
+            supabase.table('players').delete().eq('id', player_id).execute()
+            return True
+        except Exception as e:
+            st.error(f"Error deleting player from Supabase: {e}")
+            return False
+    return True  # For local, handled by save_players
 
 # Team generation algorithm
 def generate_balanced_teams(players, num_teams):
@@ -505,11 +557,17 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Connection status
+    # Connection status with details
     if USE_SUPABASE and st.session_state.get('supabase_connected', False):
         st.success("☁️ Cloud Connected")
+        # Debug info
+        players = load_players()
+        games = load_games()
+        st.caption(f"📊 {len(players)} players, {len(games)} games")
     else:
         st.info("💾 Using Local Storage")
+        if USE_SUPABASE:
+            st.caption("⚠️ Supabase configured but not connected")
     
     st.markdown("---")
     st.markdown("**Team Balance Pro**")
@@ -715,10 +773,23 @@ elif st.session_state.page == 'players':
                     with col2:
                         st.markdown("<br>", unsafe_allow_html=True)
                         if st.button(f"🗑️ Delete", key=f"delete_{idx}", use_container_width=True):
-                            players.pop(idx)
-                            save_players(players)
-                            st.success(f"Deleted {player['name']}")
-                            st.rerun()
+                            player_id = player.get('id')
+                            player_name = player['name']
+                            
+                            # Delete from Supabase if connected
+                            if player_id and delete_player(player_id):
+                                # Also remove from local list
+                                players.pop(idx)
+                                if not USE_SUPABASE:
+                                    save_players(players)  # Save locally if not using Supabase
+                                st.success(f"Deleted {player_name}")
+                                st.rerun()
+                            elif not player_id:
+                                # No ID means local only
+                                players.pop(idx)
+                                save_players(players)
+                                st.success(f"Deleted {player_name}")
+                                st.rerun()
         
         st.markdown('</div>', unsafe_allow_html=True)
     
