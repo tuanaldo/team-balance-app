@@ -362,7 +362,7 @@ st.markdown("""
     }
     
     .stTabs [data-baseweb="tab"][aria-selected="true"] {
-        background: #000000;
+        background: #ffffff;
         color: white !important;
     }
     
