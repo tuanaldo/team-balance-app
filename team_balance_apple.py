@@ -232,7 +232,7 @@ st.markdown("""
     }
     
     .stButton > button[kind="primary"] {
-        background: #000000 !important;
+        background: #ffffff !important;
         color: #ffffff !important;
         border: none !important;
     }
