@@ -2,7 +2,7 @@ import streamlit as st
 import json
 from datetime import datetime
 import random
-from pulp import *
+from ortools.sat.python import cp_model
 import pandas as pd
 from io import StringIO
 import os
@@ -547,79 +547,87 @@ def delete_player(player_id):
 
 # Team generation algorithm
 def generate_balanced_teams(players, num_teams):
-    """Generate balanced teams using optimization"""
+    """Generate balanced teams using OR-Tools optimization"""
+    from ortools.sat.python import cp_model
+    
     n_players = len(players)
     
     if n_players < num_teams:
         return None
     
-    # Create optimization problem
-    prob = LpProblem("Team_Balance", LpMinimize)
+    # Create the model
+    model = cp_model.CpModel()
     
     # Decision variables: player i assigned to team j
-    x = {}
+    assignments = {}
     for i in range(n_players):
         for j in range(num_teams):
-            x[i, j] = LpVariable(f"x_{i}_{j}", cat='Binary')
+            assignments[(i, j)] = model.NewBoolVar(f'player_{i}_team_{j}')
     
-    # Each player assigned to exactly one team
+    # Constraint: Each player assigned to exactly one team
     for i in range(n_players):
-        prob += lpSum(x[i, j] for j in range(num_teams)) == 1
+        model.Add(sum(assignments[(i, j)] for j in range(num_teams)) == 1)
     
-    # Team size constraints (as equal as possible)
+    # Constraint: Team sizes should be as equal as possible
     min_size = n_players // num_teams
     max_size = min_size + (1 if n_players % num_teams > 0 else 0)
     
     for j in range(num_teams):
-        prob += lpSum(x[i, j] for i in range(n_players)) >= min_size
-        prob += lpSum(x[i, j] for i in range(n_players)) <= max_size
+        team_size = sum(assignments[(i, j)] for i in range(n_players))
+        model.Add(team_size >= min_size)
+        model.Add(team_size <= max_size)
     
-    # Objective: minimize variance in total skill across teams
-    team_skills = []
-    for j in range(num_teams):
-        team_skill = lpSum(
-            x[i, j] * (
-                players[i].get('running_ability', 5) +
-                players[i].get('goal_scoring', 5) +
-                players[i].get('overall_skill', 5)
-            ) / 3.0
-            for i in range(n_players)
+    # Calculate player scores (combination of all stats)
+    player_scores = []
+    for player in players:
+        score = (
+            player.get('running_ability', 5) +
+            player.get('goal_scoring', 5) +
+            player.get('overall_skill', 5)
         )
-        team_skills.append(team_skill)
+        player_scores.append(score)
     
-    # Minimize maximum deviation from average
-    avg_skill = sum(
-        (p.get('running_ability', 5) + p.get('goal_scoring', 5) + p.get('overall_skill', 5)) / 3.0
-        for p in players
-    ) / num_teams
+    # Scale scores to integers (OR-Tools works with integers)
+    scaled_scores = [int(score * 100) for score in player_scores]
     
-    deviation = LpVariable("max_deviation")
-    for team_skill in team_skills:
-        prob += deviation >= team_skill - avg_skill * min_size
-        prob += deviation >= avg_skill * min_size - team_skill
+    # Calculate team totals
+    team_totals = []
+    for j in range(num_teams):
+        team_total = sum(assignments[(i, j)] * scaled_scores[i] for i in range(n_players))
+        team_totals.append(team_total)
     
-    prob += deviation
+    # Minimize the difference between max and min team totals
+    max_total = model.NewIntVar(0, sum(scaled_scores), 'max_total')
+    min_total = model.NewIntVar(0, sum(scaled_scores), 'min_total')
+    
+    for total in team_totals:
+        model.Add(max_total >= total)
+        model.Add(min_total <= total)
+    
+    # Objective: minimize the range (max - min)
+    model.Minimize(max_total - min_total)
     
     # Solve
-    prob.solve(PULP_CBC_CMD(msg=0))
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = 10.0  # 10 second timeout
+    status = solver.Solve(model)
     
-    if prob.status != 1:
-        # Fallback to random assignment
+    if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
+        # Extract solution
+        teams = [[] for _ in range(num_teams)]
+        for i in range(n_players):
+            for j in range(num_teams):
+                if solver.Value(assignments[(i, j)]) == 1:
+                    teams[j].append(players[i])
+        return teams
+    else:
+        # Fallback to simple distribution if optimization fails
         teams = [[] for _ in range(num_teams)]
         shuffled = players.copy()
         random.shuffle(shuffled)
         for i, player in enumerate(shuffled):
             teams[i % num_teams].append(player)
         return teams
-    
-    # Extract solution
-    teams = [[] for _ in range(num_teams)]
-    for i in range(n_players):
-        for j in range(num_teams):
-            if x[i, j].varValue > 0.5:
-                teams[j].append(players[i])
-    
-    return teams
 
 # Initialize session state
 if 'page' not in st.session_state:
