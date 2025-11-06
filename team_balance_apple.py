@@ -672,7 +672,7 @@ if st.session_state.page == 'home':
     # Header with Logo and Title
     st.markdown("""
     <div class="header-card">
-        <div class="logo-box"><img src="logo.png" style="height:64px;"></div>
+        <div class="logo-box"><img src="/logo.png" style="height:64px;"></div>
         <h1 class="app-title">Team Balancer Pro</h1>
     </div>
     """, unsafe_allow_html=True)
